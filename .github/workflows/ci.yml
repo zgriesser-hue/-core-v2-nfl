@@ -5,15 +5,78 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore repository folders
+        shell: bash
+        run: |
+          mkdir -p core_v2
+          mkdir -p scripts
+          mkdir -p tests/fixtures
+          mkdir -p data/model
+          mkdir -p data/schedules
+          mkdir -p data/production/2026/week_01
+          mkdir -p data/market/2026/week_01
+
+          move_file() {
+            if [ -f "$1" ] && [ ! -e "$2" ]; then
+              git mv "$1" "$2"
+            fi
+          }
+
+          move_file "__init__.py" "core_v2/__init__.py"
+          move_file "config.py" "core_v2/config.py"
+          move_file "io.py" "core_v2/io.py"
+          move_file "market.py" "core_v2/market.py"
+          move_file "projections.py" "core_v2/projections.py"
+
+          move_file "build_week.py" "scripts/build_week.py"
+          move_file "capture_openers.py" "scripts/capture_openers.py"
+          move_file "publish_week.py" "scripts/publish_week.py"
+          move_file "resolve_week.py" "scripts/resolve_week.py"
+          move_file "validate_dashboard.py" "scripts/validate_dashboard.py"
+
+          if [ ! -f "scripts/__init__.py" ]; then
+            printf '%s\n' '"""Core V2 command-line scripts."""' > scripts/__init__.py
+          fi
+
+          move_file "test_io.py" "tests/test_io.py"
+          move_file "test_market.py" "tests/test_market.py"
+          move_file "test_projection_parity.py" "tests/test_projection_parity.py"
+          move_file "week_01_expected_projections.csv" "tests/fixtures/week_01_expected_projections.csv"
+
+          move_file "historical_projection_locks.csv" "data/model/historical_projection_locks.csv"
+          move_file "manual_adjustments_2026.csv" "data/model/manual_adjustments_2026.csv"
+          move_file "team_ratings_2026.csv" "data/model/team_ratings_2026.csv"
+          move_file "schedule_2026.csv" "data/schedules/schedule_2026.csv"
+          move_file "personnel_adjustments.csv" "data/production/2026/week_01/personnel_adjustments.csv"
+
+          move_file "book_openers.csv" "data/market/2026/week_01/book_openers.csv"
+          move_file "consensus_openers.csv" "data/market/2026/week_01/consensus_openers.csv"
+          move_file "dashboard_openers.csv" "data/market/2026/week_01/dashboard_openers.csv"
+          move_file "latest_book_lines.csv" "data/market/2026/week_01/latest_book_lines.csv"
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "core-v2-automation"
+            git config user.email "core-v2-automation@users.noreply.github.com"
+            git add .
+            git commit -m "Fix Core V2 repository structure"
+            git push
+          fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
+
       - run: python -m pip install -e ".[test]"
       - run: python -m pytest -q
       - run: python -m py_compile app.py parlay_live.py core_v2/*.py scripts/*.py
