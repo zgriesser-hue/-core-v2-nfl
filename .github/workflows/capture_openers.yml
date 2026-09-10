@@ -1,0 +1,62 @@
+name: Capture next-week openers
+
+on:
+  schedule:
+    - cron: "30 11 * * 1"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: NFL season
+        required: true
+        default: "2026"
+      week:
+        description: Week number; leave blank to resolve next future week
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: core-v2-opener-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    env:
+      PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
+      TARGET_SEASON: ${{ inputs.season || '2026' }}
+      TARGET_WEEK: ${{ inputs.week }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e .
+      - name: Resolve target and capture one snapshot
+        shell: bash
+        run: |
+          if [ -z "$TARGET_WEEK" ]; then
+            TARGET_WEEK=$(python -m scripts.resolve_week --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
+          fi
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          python -m scripts.capture_openers \
+            --season "$TARGET_SEASON" \
+            --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --output-dir "data/market/${TARGET_SEASON}/week_${WEEK_PADDED}" \
+            --dashboard-output "data/market/${TARGET_SEASON}/week_${WEEK_PADDED}/dashboard_openers.csv" \
+            --dashboard-lines-output "data/market/${TARGET_SEASON}/week_${WEEK_PADDED}/latest_book_lines.csv"
+      - name: Commit immutable openers and staged fallback lines
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No new opener records"
+            exit 0
+          fi
+          git config user.name "core-v2-automation"
+          git config user.email "core-v2-automation@users.noreply.github.com"
+          git add data/market
+          git commit -m "data: capture Core V2 weekly openers"
+          git push
