@@ -1,5 +1,7 @@
 
 import time
+
+CORE_V2_LINE_MOVEMENT_V1 = True
 from pathlib import Path
 
 import pandas as pd
@@ -191,6 +193,12 @@ if "live_metadata" not in st.session_state:
 if "refresh_error" not in st.session_state:
     st.session_state.refresh_error = None
 
+if "previous_lines" not in st.session_state:
+    st.session_state.previous_lines = None
+
+if "previous_metadata" not in st.session_state:
+    st.session_state.previous_metadata = None
+
 has_api_key = (
     "PARLAY_API_KEY" in st.secrets
     and bool(
@@ -270,6 +278,58 @@ if refresh_clicked:
                 )
             )
 
+            lines_before_refresh = (
+                st.session_state.live_lines.copy()
+                if st.session_state.live_lines is not None
+                else static_lines.copy()
+            )
+
+            if (
+                "market_snapshot_timestamp_et"
+                in lines_before_refresh.columns
+                and not lines_before_refresh.empty
+            ):
+                previous_snapshot = (
+                    lines_before_refresh[
+                        "market_snapshot_timestamp_et"
+                    ].iloc[0]
+                )
+            else:
+                previous_snapshot = None
+
+            new_snapshot = metadata.get(
+                "snapshot_timestamp"
+            )
+
+            previous_snapshot_parsed = pd.to_datetime(
+                previous_snapshot,
+                errors="coerce",
+                utc=True,
+            )
+
+            new_snapshot_parsed = pd.to_datetime(
+                new_snapshot,
+                errors="coerce",
+                utc=True,
+            )
+
+            is_new_snapshot = (
+                pd.isna(previous_snapshot_parsed)
+                or pd.isna(new_snapshot_parsed)
+                or previous_snapshot_parsed
+                != new_snapshot_parsed
+            )
+
+            if is_new_snapshot:
+                st.session_state.previous_lines = (
+                    lines_before_refresh
+                )
+
+                st.session_state.previous_metadata = {
+                    "snapshot_timestamp":
+                        previous_snapshot
+                }
+
             st.session_state.live_lines = (
                 live_lines
             )
@@ -309,6 +369,81 @@ except Exception as exc:
         f"a valid board: {type(exc).__name__}: {exc}"
     )
     st.stop()
+
+# --------------------------------------------------------------------------------------------------
+# Line movement since the prior displayed snapshot
+# --------------------------------------------------------------------------------------------------
+
+movement = pd.DataFrame()
+
+if st.session_state.previous_lines is not None:
+    try:
+        previous_board = rebuild_board(
+            base_board,
+            st.session_state.previous_lines,
+        )
+
+        movement = (
+            board[
+                [
+                    "matchup",
+                    "away_team",
+                    "home_team",
+                    "market_home_spread",
+                ]
+            ]
+            .merge(
+                previous_board[
+                    [
+                        "matchup",
+                        "market_home_spread",
+                    ]
+                ].rename(
+                    columns={
+                        "market_home_spread":
+                            "previous_market_home_spread"
+                    }
+                ),
+                on="matchup",
+                how="left",
+                validate="one_to_one",
+            )
+        )
+
+        movement["market_move"] = (
+            movement["market_home_spread"]
+            -
+            movement[
+                "previous_market_home_spread"
+            ]
+        )
+
+        def movement_direction(row):
+            move = row["market_move"]
+
+            if pd.isna(move):
+                return "—"
+
+            if abs(float(move)) < 0.001:
+                return "Unchanged"
+
+            if float(move) < 0:
+                return f"Toward {row['home_team']}"
+
+            return f"Toward {row['away_team']}"
+
+        movement["movement_direction"] = (
+            movement.apply(
+                movement_direction,
+                axis=1,
+            )
+        )
+
+    except Exception as exc:
+        st.warning(
+            "Previous lines could not be compared: "
+            f"{type(exc).__name__}: {exc}"
+        )
 
 if st.session_state.live_metadata:
     metadata = st.session_state.live_metadata
@@ -412,11 +547,12 @@ st.sidebar.caption(
 # Tabs
 # --------------------------------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     [
         "Market Board",
         "Game Detail",
         "Sportsbook Lines",
+        "Line Movement",
         "Power Ratings",
         "Model Performance",
     ]
@@ -442,6 +578,26 @@ with tab1:
                 "projection_display_status"
             ] != "EARLY_PROVISIONAL"
         ]
+
+    if not movement.empty:
+        filtered = filtered.merge(
+            movement[
+                [
+  
+                  "matchup",
+                    "previous_market_home_spread",
+                    "market_move",
+                    "movement_direction",
+                ]
+            ],
+            on="matchup",
+            how="left",
+            validate="one_to_one",
+        )
+    else:
+        filtered["previous_market_home_spread"] = pd.NA
+        filtered["market_move"] = pd.NA
+        filtered["movement_direction"] = "—"
 
     m1, m2, m3, m4 = st.columns(4)
 
@@ -491,6 +647,26 @@ with tab1:
                 ),
                 axis=1,
             ),
+            "Previous": filtered.apply(
+                lambda row: display_home_line(
+                    row["away_team"],
+                    row["home_team"],
+                    row[
+                        "previous_market_home_spread"
+                    ],
+                ),
+                axis=1,
+            ),
+            "Move": filtered["market_move"].map(
+                lambda value: (
+                    f"{float(value):+.1f}"
+                    if pd.notna(value)
+                    else "—"
+                )
+            ),
+            "Direction": filtered[
+                "movement_direction"
+            ],
             "Lean": filtered["model_side"],
             "Gap": filtered[
                 "edge_points"
@@ -584,7 +760,7 @@ with tab2:
         row["best_quote_status"]
     ).startswith("MANUAL_VERIFY"):
         st.warning(
-        
+
             "Verify this line directly in the "
             "sportsbook before using it."
         )
@@ -704,6 +880,155 @@ with tab3:
     )
 
 with tab4:
+    st.subheader("Consensus Line Movement")
+
+    previous_timestamp = None
+
+    if st.session_state.previous_metadata:
+        previous_timestamp = (
+            st.session_state.previous_metadata.get(
+                "snapshot_timestamp"
+            )
+        )
+
+    current_timestamp = (
+        st.session_state.live_metadata.get(
+            "snapshot_timestamp"
+        )
+        if st.session_state.live_metadata
+        else market_timestamp
+    )
+
+    if movement.empty:
+        st.info(
+            "No comparison snapshot is available yet. "
+            "Refresh the live lines to compare them "
+            "with the currently displayed repository snapshot."
+        )
+    else:
+        changed_games = int(
+            movement["market_move"]
+            .abs()
+            .gt(0.001)
+            .sum()
+        )
+
+        largest_move = (
+            movement["market_move"]
+            .abs()
+            .max()
+        )
+
+        lm1, lm2, lm3 = st.columns(3)
+
+        lm1.metric(
+            "Games Moved",
+            changed_games,
+        )
+
+        lm2.metric(
+            "Largest Move",
+            (
+                f"{largest_move:.1f} pts"
+                if pd.notna(largest_move)
+                else "—"
+            ),
+        )
+
+        lm3.metric(
+            "Games Compared",
+            len(movement),
+        )
+
+        st.caption(
+            "Previous: "
+            + display_timestamp(previous_timestamp)
+            + "  |  Current: "
+            + display_timestamp(current_timestamp)
+        )
+
+        movement_display = movement.copy()
+
+        movement_display["Previous"] = (
+            movement_display.apply(
+                lambda row: display_home_line(
+                    row["away_team"],
+                    row["home_team"],
+                    row[
+                        "previous_market_home_spread"
+                    ],
+                ),
+                axis=1,
+            )
+        )
+
+        movement_display["Current"] = (
+            movement_display.apply(
+                lambda row: display_home_line(
+                    row["away_team"],
+                    row["home_team"],
+                    row["market_home_spread"],
+                ),
+                axis=1,
+            )
+        )
+
+        movement_display["Move"] = (
+            movement_display["market_move"].map(
+                lambda value: (
+                    f"{float(value):+.1f}"
+                    if pd.notna(value)
+                    else "—"
+                )
+            )
+        )
+
+        movement_display["Absolute move"] = (
+            movement_display["market_move"].abs()
+        )
+
+        movement_display = (
+            movement_display
+            .sort_values(
+                [
+                    "Absolute move",
+                    "matchup",
+                ],
+                ascending=[
+                    False,
+                    True,
+                ],
+            )
+        )
+
+        st.dataframe(
+            movement_display[
+                [
+                    "matchup",
+                    "Previous",
+                    "Current",
+                    "Move",
+                    "movement_direction",
+                ]
+            ].rename(
+                columns={
+                    "matchup": "Matchup",
+                    "movement_direction": "Direction",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.caption(
+            "Movement is the change in the home-team "
+            "spread. Negative movement is toward the "
+            "home team; positive movement is toward "
+            "the away team."
+        )
+
+
+with tab5:
     st.subheader("Power Ratings")
 
     st.info(
@@ -717,7 +1042,7 @@ with tab4:
         "the active PVAR personnel layer."
     )
 
-with tab5:
+with tab6:
     result = validation.iloc[0]
 
     p1, p2, p3, p4 = st.columns(4)
