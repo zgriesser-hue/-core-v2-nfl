@@ -388,7 +388,8 @@ except Exception as exc:
 
 opener_fields = openers[
     [
-        "game_key",
+        "away_team",
+        "home_team",
         "consensus_open_home_spread",
         "consensus_open_books",
         "earliest_core_open_seen_utc",
@@ -397,11 +398,29 @@ opener_fields = openers[
     ]
 ].copy()
 
+opener_fields = opener_fields.drop_duplicates(
+    subset=[
+        "away_team",
+        "home_team",
+    ],
+    keep="last",
+)
+
+board_rows_before_opener_merge = len(board)
+
 board = board.merge(
     opener_fields,
-    on="game_key",
+    on=[
+        "away_team",
+        "home_team",
+    ],
     how="left",
     validate="one_to_one",
+)
+
+assert len(board) == board_rows_before_opener_merge, (
+    "Opener merge unexpectedly changed the number "
+    "of dashboard games."
 )
 
 if board[
