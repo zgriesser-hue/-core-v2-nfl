@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+from core_v2.io import clean_bool
+
 
 API_URL = "https://parlay-api.com/v1/sports/americanfootball_nfl/odds"
 
@@ -243,6 +245,10 @@ def normalize_existing_lines(lines):
 
     if "book_topped_up_clean" not in lines.columns:
         lines["book_topped_up_clean"] = False
+    else:
+        lines["book_topped_up_clean"] = lines[
+            "book_topped_up_clean"
+        ].map(clean_bool)
 
     if "matchup" not in lines.columns:
         lines["matchup"] = (
@@ -437,7 +443,7 @@ def fetch_live_lines(api_key, season, week, active_game_keys):
                             decimal_to_american(
                                 home_decimal
                             ),
-                        "book_topped_up_clean": bool(
+                        "book_topped_up_clean": clean_bool(
                             book.get("topped_up")
                         ),
                         "book_feed_status": (
