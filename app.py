@@ -2,6 +2,7 @@
 import time
 
 CORE_V2_LINE_MOVEMENT_V1 = True
+CORE_V2_OPENER_MOVEMENT_V1 = True
 from pathlib import Path
 
 import pandas as pd
@@ -147,6 +148,10 @@ validation_path = locate_file(
     "model_validation.csv"
 )
 
+openers_path = locate_file(
+    "week_01_openers.csv"
+)
+
 missing = []
 
 if board_path is None:
@@ -157,6 +162,9 @@ if lines_path is None:
 
 if validation_path is None:
     missing.append("model_validation.csv")
+
+if openers_path is None:
+    missing.append("week_01_openers.csv")
 
 if missing:
     st.error(
@@ -175,6 +183,10 @@ static_lines = load_csv(
 
 validation = load_csv(
     str(validation_path)
+)
+
+openers = load_csv(
+    str(openers_path)
 )
 
 active_game_keys = tuple(
@@ -369,6 +381,123 @@ except Exception as exc:
         f"a valid board: {type(exc).__name__}: {exc}"
     )
     st.stop()
+
+# --------------------------------------------------------------------------------------------------
+# Permanent movement from the market opener
+# --------------------------------------------------------------------------------------------------
+
+opener_fields = openers[
+    [
+        "game_key",
+        "consensus_open_home_spread",
+        "consensus_open_books",
+        "earliest_core_open_seen_utc",
+        "latest_core_open_seen_utc",
+        "consensus_method",
+    ]
+].copy()
+
+board = board.merge(
+    opener_fields,
+    on="game_key",
+    how="left",
+    validate="one_to_one",
+)
+
+if board[
+    "consensus_open_home_spread"
+].isna().any():
+    missing_openers = board.loc[
+        board[
+            "consensus_open_home_spread"
+        ].isna(),
+        "game_key",
+    ].tolist()
+
+    st.error(
+        "Missing consensus openers for: "
+        + ", ".join(missing_openers)
+    )
+    st.stop()
+
+board["open_to_current_move"] = (
+    board["market_home_spread"]
+    -
+    board["consensus_open_home_spread"]
+)
+
+board["open_distance_from_model"] = (
+    board["consensus_open_home_spread"]
+    -
+    board["fair_home_spread"]
+).abs()
+
+board["current_distance_from_model"] = (
+    board["market_home_spread"]
+    -
+    board["fair_home_spread"]
+).abs()
+
+
+def opener_move_direction(row):
+    move = row["open_to_current_move"]
+
+    if pd.isna(move):
+        return "—"
+
+    if abs(float(move)) < 0.001:
+        return "Unchanged"
+
+    if float(move) < 0:
+        return f"Toward {row['home_team']}"
+
+    return f"Toward {row['away_team']}"
+
+
+def model_alignment_label(row):
+    opening_distance = row[
+        "open_distance_from_model"
+    ]
+
+    current_distance = row[
+        "current_distance_from_model"
+    ]
+
+    if (
+        pd.isna(opening_distance)
+        or pd.isna(current_distance)
+    ):
+        return "—"
+
+    difference = (
+        float(current_distance)
+        -
+        float(opening_distance)
+    )
+
+    if abs(difference) < 0.001:
+        return "Same distance"
+
+    if difference < 0:
+        return "Toward Core V2"
+
+    return "Away from Core V2"
+
+
+board["opener_move_direction"] = (
+    board.apply(
+        opener_move_direction,
+        axis=1,
+    )
+)
+
+board["market_vs_model_path"] = (
+    board.apply(
+        model_alignment_label,
+        axis=1,
+    )
+)
+
 
 # --------------------------------------------------------------------------------------------------
 # Line movement since the prior displayed snapshot
@@ -639,6 +768,16 @@ with tab1:
                 ),
                 axis=1,
             ),
+            "Opener": filtered.apply(
+                lambda row: display_home_line(
+                    row["away_team"],
+                    row["home_team"],
+                    row[
+                        "consensus_open_home_spread"
+                    ],
+                ),
+                axis=1,
+            ),
             "Market": filtered.apply(
                 lambda row: display_home_line(
                     row["away_team"],
@@ -647,6 +786,18 @@ with tab1:
                 ),
                 axis=1,
             ),
+            "From open": filtered[
+                "open_to_current_move"
+            ].map(
+                lambda value: (
+                    f"{float(value):+.1f}"
+                    if pd.notna(value)
+                    else "—"
+                )
+            ),
+            "Open direction": filtered[
+                "opener_move_direction"
+            ],
             "Previous": filtered.apply(
                 lambda row: display_home_line(
                     row["away_team"],
@@ -754,6 +905,36 @@ with tab2:
     c3.metric(
         "Sportsbook",
         row["best_book"],
+    )
+
+    st.divider()
+
+    o1, o2, o3 = st.columns(3)
+
+    o1.metric(
+        "Market Opener",
+        display_home_line(
+            row["away_team"],
+            row["home_team"],
+            row["consensus_open_home_spread"],
+        ),
+    )
+
+    o2.metric(
+        "Movement From Open",
+        f'{row["open_to_current_move"]:+.1f} pts',
+    )
+
+    o3.metric(
+        "Market Path",
+        row["market_vs_model_path"],
+    )
+
+    st.caption(
+        "Opening consensus based on "
+        f'{int(row["consensus_open_books"])} books. '
+        "Comparison with Core V2 is descriptive because "
+        "the current model projection may postdate the opener."
     )
 
     if str(
@@ -880,7 +1061,133 @@ with tab3:
     )
 
 with tab4:
-    st.subheader("Consensus Line Movement")
+    st.subheader("Movement From Market Opener")
+
+    opener_moves = board.copy()
+
+    games_moved_from_open = int(
+        opener_moves["open_to_current_move"]
+        .abs()
+        .gt(0.001)
+        .sum()
+    )
+
+    largest_opener_move = (
+        opener_moves["open_to_current_move"]
+        .abs()
+        .max()
+    )
+
+    moved_toward_model = int(
+        opener_moves["market_vs_model_path"]
+        .eq("Toward Core V2")
+        .sum()
+    )
+
+    om1, om2, om3 = st.columns(3)
+
+    om1.metric(
+        "Games Moved",
+        games_moved_from_open,
+    )
+
+    om2.metric(
+        "Largest Move",
+        (
+            f"{largest_opener_move:.1f} pts"
+            if pd.notna(largest_opener_move)
+            else "—"
+        ),
+    )
+
+    om3.metric(
+        "Moved Toward Core V2",
+        moved_toward_model,
+    )
+
+    opener_moves["Opener"] = (
+        opener_moves.apply(
+            lambda row: display_home_line(
+                row["away_team"],
+                row["home_team"],
+                row[
+                    "consensus_open_home_spread"
+                ],
+            ),
+            axis=1,
+        )
+    )
+
+    opener_moves["Current"] = (
+        opener_moves.apply(
+            lambda row: display_home_line(
+                row["away_team"],
+                row["home_team"],
+                row["market_home_spread"],
+            ),
+            axis=1,
+        )
+    )
+
+    opener_moves["Move"] = (
+        opener_moves[
+            "open_to_current_move"
+        ].map(
+            lambda value: (
+                f"{float(value):+.1f}"
+                if pd.notna(value)
+                else "—"
+            )
+        )
+    )
+
+    opener_moves["Absolute move"] = (
+        opener_moves[
+            "open_to_current_move"
+        ].abs()
+    )
+
+    opener_moves = opener_moves.sort_values(
+        [
+            "Absolute move",
+            "matchup",
+        ],
+        ascending=[
+            False,
+            True,
+        ],
+    )
+
+    st.dataframe(
+        opener_moves[
+            [
+                "matchup",
+                "Opener",
+                "Current",
+                "Move",
+                "opener_move_direction",
+                "market_vs_model_path",
+            ]
+        ].rename(
+            columns={
+                "matchup": "Matchup",
+                "opener_move_direction": "Direction",
+                "market_vs_model_path": "Vs Core V2",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.caption(
+        "Negative movement is toward the home team; "
+        "positive movement is toward the away team. "
+        "'Toward Core V2' is descriptive—not evidence "
+        "that the model predicted the move."
+    )
+
+    st.divider()
+    st.subheader("Movement Since Previous Refresh")
 
     previous_timestamp = None
 
