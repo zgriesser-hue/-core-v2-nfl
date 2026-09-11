@@ -5,6 +5,7 @@ from core_v2.market import (
     build_consensus_openers,
     parse_spread_payload,
 )
+from parlay_live import select_pregame_game_keys
 
 
 def payload(line=-3.5, topped_up="False"):
@@ -62,3 +63,101 @@ def test_consensus_uses_configured_core_books():
     result = build_consensus_openers(pd.DataFrame(rows))
     assert result.loc[0, "consensus_open_home_spread"] == -4.0
     assert result.loc[0, "consensus_open_books"] == 3
+
+
+def test_live_refresh_excludes_started_and_graded_games():
+    board = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "game_key": "2026_W1_NE_SEA",
+                "away_team": "NE",
+                "home_team": "SEA",
+            },
+            {
+                "season": 2026,
+                "week": 1,
+                "game_key": "2026_W1_SF_LA",
+                "away_team": "SF",
+                "home_team": "LA",
+            },
+            {
+                "season": 2026,
+                "week": 1,
+                "game_key": "2026_W1_CHI_CAR",
+                "away_team": "CHI",
+                "home_team": "CAR",
+            },
+        ]
+    )
+    schedule = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "away_team": "NE",
+                "home_team": "SEA",
+                "gameday": "2026-09-09",
+                "gametime": "20:20",
+            },
+            {
+                "season": 2026,
+                "week": 1,
+                "away_team": "SF",
+                "home_team": "LA",
+                "gameday": "2026-09-10",
+                "gametime": "20:35",
+            },
+            {
+                "season": 2026,
+                "week": 1,
+                "away_team": "CHI",
+                "home_team": "CAR",
+                "gameday": "2026-09-13",
+                "gametime": "13:00",
+            },
+        ]
+    )
+
+    keys = select_pregame_game_keys(
+        board,
+        schedule=schedule,
+        completed_game_keys={"2026_W1_NE_SEA"},
+        now_utc="2026-09-11T14:47:00Z",
+    )
+
+    assert keys == ("2026_W1_CHI_CAR",)
+
+
+def test_live_refresh_keeps_future_missing_api_game_in_validation_set():
+    board = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "game_key": "2026_W1_CHI_CAR",
+                "away_team": "CHI",
+                "home_team": "CAR",
+            }
+        ]
+    )
+    schedule = pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "week": 1,
+                "away_team": "CHI",
+                "home_team": "CAR",
+                "kickoff_utc": "2026-09-13T17:00:00Z",
+            }
+        ]
+    )
+
+    keys = select_pregame_game_keys(
+        board,
+        schedule=schedule,
+        now_utc="2026-09-11T14:47:00Z",
+    )
+
+    assert keys == ("2026_W1_CHI_CAR",)
