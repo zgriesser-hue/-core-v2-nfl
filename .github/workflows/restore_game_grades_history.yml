@@ -69,6 +69,64 @@ jobs:
           combined = combined.dropna(subset=["game_key"])
           combined["game_key"] = combined["game_key"].astype(str)
           combined = combined.drop_duplicates("game_key", keep="first")
+
+          # NE–SEA was preserved by the old dashboard code rather than a
+          # game_grades.csv row, so it cannot always be found in Git history.
+          # Rebuild that one historical record from the repository's locked
+          # final-pregame projection and stored market line.
+          if "2026_W1_NE_SEA" not in set(combined["game_key"]):
+              locks = pd.read_csv("data/model/historical_projection_locks.csv")
+              schedule = pd.read_csv("data/schedules/schedule_2026.csv")
+              fair = float(
+                  locks.loc[
+                      locks["game_key"].eq("2026_W1_NE_SEA"),
+                      "fair_spread_home_locked",
+                  ].iloc[0]
+              )
+              scheduled = schedule.loc[
+                  schedule["game_id"].eq("2026_01_NE_SEA")
+              ].iloc[0]
+              market_home_spread = -float(scheduled["spread_line"])
+              actual_home_margin = 13 - 10
+              projected_home_margin = -fair
+              release_bet_spread = -market_home_spread
+
+              restored = {column: pd.NA for column in combined.columns}
+              restored.update(
+                  {
+                      "season": 2026,
+                      "week": 1,
+                      "game_key": "2026_W1_NE_SEA",
+                      "away_team": "NE",
+                      "home_team": "SEA",
+                      "fair_home_spread": fair,
+                      "market_home_spread": market_home_spread,
+                      "model_selected_team": "NE",
+                      "model_selected_side": "AWAY",
+                      "release_bet_spread": release_bet_spread,
+                      "model_edge_at_release": abs(fair - market_home_spread),
+                      "projection_display_status": "FINAL_PREGAME",
+                      "personnel_info_complete": True,
+                      "away_score": 10,
+                      "home_score": 13,
+                      "actual_home_margin": actual_home_margin,
+                      "projected_home_margin": projected_home_margin,
+                      "projection_abs_error": abs(
+                          actual_home_margin - projected_home_margin
+                      ),
+                      "winner_correct": True,
+                      "ats_margin_at_release": -actual_home_margin
+                      + release_bet_spread,
+                      "ats_result_at_release": "Win",
+                      "closing_status": "MISSING_NOT_BACKFILLED",
+                      "graded_timestamp_utc": pd.Timestamp.now(tz="UTC").isoformat(),
+                  }
+              )
+              combined = pd.concat(
+                  [combined, pd.DataFrame([restored])],
+                  ignore_index=True,
+              )
+
           combined = combined.sort_values(
               ["season", "week", "game_key"],
               na_position="last",
