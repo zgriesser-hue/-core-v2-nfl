@@ -1,0 +1,17 @@
+season,week,game_id,away_team,home_team,personnel_correction_current_clean,personnel_correction_min_clean,personnel_correction_max_clean,report_coverage_complete_clean,personnel_info_complete,week1_personnel_status_clean,away_report_available,home_report_available,away_known_exposure,home_known_exposure,away_unresolved_exposure_max,home_unresolved_exposure_max,manual_adjustment_home
+2026,2,2026_02_DET_BUF,DET,BUF,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_CAR_ATL,CAR,ATL,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_NO_BAL,NO,BAL,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_MIN_CHI,MIN,CHI,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_CIN_HOU,CIN,HOU,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_PIT_NE,PIT,NE,-0.35,-0.35,-0.35,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,-0.35
+2026,2,2026_02_GB_NYJ,GB,NYJ,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_CLE_TB,CLE,TB,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_PHI_TEN,PHI,TEN,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_JAX_DEN,JAX,DEN,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_LV_LAC,LV,LAC,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_SEA_ARI,SEA,ARI,1.5,1.5,1.5,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,1.5
+2026,2,2026_02_WAS_DAL,WAS,DAL,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_MIA_SF,MIA,SF,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_IND_KC,IND,KC,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0
+2026,2,2026_02_NYG_LA,NYG,LA,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0

@@ -154,11 +154,10 @@ def build_projection_board(
         "personnel_info_complete"
     ].fillna(False).astype(bool)
 
-    complete = board["personnel_info_complete"] & board[
-        "personnel_correction_current_clean"
-    ].notna()
+    correction_available = board["personnel_correction_current_clean"].notna()
+    complete = board["personnel_info_complete"] & correction_available
     board["fair_spread_home"] = np.where(
-        complete,
+        correction_available,
         -(
             board["projected_home_margin_pre_personnel"]
             + board["personnel_correction_current_clean"]
@@ -166,7 +165,7 @@ def build_projection_board(
         board["fair_spread_pre_personnel"],
     )
     board["fair_spread_low"] = np.where(
-        complete,
+        board["personnel_correction_max_clean"].notna(),
         -(
             board["projected_home_margin_pre_personnel"]
             + board["personnel_correction_max_clean"]
@@ -174,7 +173,7 @@ def build_projection_board(
         board["fair_spread_pre_personnel"],
     )
     board["fair_spread_high"] = np.where(
-        complete,
+        board["personnel_correction_min_clean"].notna(),
         -(
             board["projected_home_margin_pre_personnel"]
             + board["personnel_correction_min_clean"]
@@ -264,4 +263,3 @@ def build_from_files(
         week,
         historical_locks=locks,
     )
-
