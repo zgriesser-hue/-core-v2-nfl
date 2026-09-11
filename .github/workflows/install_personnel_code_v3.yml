@@ -1,0 +1,42 @@
+name: Install personnel automation code V3
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install code and data files
+        shell: bash
+        run: |
+          PATCH_ZIP=$(find . -type f -iname '*personnel*automation*patch*.zip' -print -quit)
+          if [ -z "$PATCH_ZIP" ]; then
+            echo "Personnel automation ZIP was not found anywhere in the repository."
+            find . -type f -iname '*.zip' -print
+            exit 1
+          fi
+          echo "Installing code from $PATCH_ZIP"
+          unzip -o "$PATCH_ZIP" -x '.github/workflows/refresh_personnel.yml'
+          rm "$PATCH_ZIP"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q
+      - run: python -m py_compile app.py parlay_live.py core_v2/*.py scripts/*.py
+      - name: Commit validated personnel code
+        shell: bash
+        run: |
+          find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+          git config user.name "core-v2-automation"
+          git config user.email "core-v2-automation@users.noreply.github.com"
+          git add core_v2 scripts tests data README.md requirements.txt pyproject.toml
+          git commit -m "feat: add frozen weekly personnel engine"
+          git push
