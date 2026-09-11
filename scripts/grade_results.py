@@ -25,8 +25,8 @@ def main() -> None:
     parser.add_argument("--results-url", default=DEFAULT_RESULTS_URL)
     args = parser.parse_args()
 
-    if not args.releases.exists() or not args.closings.exists():
-        print("No release/closing pair is available yet; nothing to grade")
+    if not args.releases.exists():
+        print("No projection release history is available yet; nothing to grade")
         return
 
     if args.results_file:
@@ -38,8 +38,8 @@ def main() -> None:
     results = normalize_results(raw, args.season)
     releases = pd.read_csv(args.releases) if args.releases.exists() else pd.DataFrame()
     closings = pd.read_csv(args.closings) if args.closings.exists() else pd.DataFrame()
-    if releases.empty or closings.empty:
-        print("Release or closing history is empty; nothing to grade")
+    if releases.empty:
+        print("Projection release history is empty; nothing to grade")
         return
     existing = pd.read_csv(args.history) if args.history.exists() else pd.DataFrame()
     grades = grade_completed_games(releases, closings, results, existing)

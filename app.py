@@ -1449,8 +1449,8 @@ with tab6:
 
     if game_grades.empty:
         st.info(
-            "Live grades will appear after a game has both an automated "
-            "pre-kickoff closing snapshot and a final score."
+            "Live grades will appear after a final score is available. "
+            "CLV appears only when an automated pre-kickoff close was captured."
         )
     else:
         live = game_grades.copy()
@@ -1459,6 +1459,8 @@ with tab6:
             "clv_points",
             "release_bet_spread",
             "closing_bet_spread",
+            "away_score",
+            "home_score",
         ]:
             live[column] = pd.to_numeric(live[column], errors="coerce")
 
@@ -1492,12 +1494,31 @@ with tab6:
             {
                 "Week": live["week"].astype(int),
                 "Matchup": live["away_team"] + " @ " + live["home_team"],
+                "Final": live.apply(
+                    lambda row: (
+                        f"{row['away_team']} {int(row['away_score'])} – "
+                        f"{row['home_team']} {int(row['home_score'])}"
+                        if pd.notna(row["away_score"]) and pd.notna(row["home_score"])
+                        else "—"
+                    ),
+                    axis=1,
+                ),
                 "Model side": live["model_selected_team"],
                 "Release line": live["release_bet_spread"].map(
                     lambda value: format_spread(value) if pd.notna(value) else "PASS"
                 ),
                 "Closing line": live["closing_bet_spread"].map(
                     lambda value: format_spread(value) if pd.notna(value) else "—"
+                ),
+                "Close status": (
+                    live["closing_status"].map(
+                        {
+                            "CAPTURED": "Captured",
+                            "MISSING_NOT_BACKFILLED": "Not captured",
+                        }
+                    ).fillna("—")
+                    if "closing_status" in live.columns
+                    else "—"
                 ),
                 "CLV": live["clv_points"].map(
                     lambda value: f"{value:+.1f}" if pd.notna(value) else "—"
@@ -1515,5 +1536,6 @@ with tab6:
         )
         st.caption(
             "CLV compares the market consensus at the published model release "
-            "with the automated pre-kickoff consensus. Positive is favorable."
+            "with the automated pre-kickoff consensus. Positive is favorable. "
+            "A missed close is left blank and is never reconstructed from an earlier quote."
         )

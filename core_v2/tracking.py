@@ -190,18 +190,29 @@ def grade_completed_games(
     results: pd.DataFrame,
     existing_grades: pd.DataFrame,
 ) -> pd.DataFrame:
-    if releases.empty or closings.empty or results.empty:
+    if releases.empty or results.empty:
         return existing_grades.copy()
     candidates = releases.copy()
     candidates["_release_ts"] = pd.to_datetime(
         candidates["release_timestamp_utc"], utc=True, errors="coerce"
     )
+    closing_columns = [
+        "game_key",
+        "closing_home_spread",
+        "consensus_books",
+        "snapshot_timestamp_utc",
+    ]
+    if closings.empty:
+        closing_data = pd.DataFrame(columns=closing_columns)
+    else:
+        missing = set(closing_columns) - set(closings.columns)
+        if missing:
+            raise ValueError(f"Closing history missing columns: {sorted(missing)}")
+        closing_data = closings[closing_columns].copy()
     candidates = candidates.merge(
-        closings[["game_key", "closing_home_spread", "consensus_books", "snapshot_timestamp_utc"]].rename(
-            columns={"consensus_books": "closing_consensus_books"}
-        ),
+        closing_data.rename(columns={"consensus_books": "closing_consensus_books"}),
         on="game_key",
-        how="inner",
+        how="left",
         validate="many_to_one",
     )
     candidates["_closing_ts"] = pd.to_datetime(
@@ -209,8 +220,10 @@ def grade_completed_games(
     )
     candidates = candidates.loc[
         candidates["_release_ts"].notna()
-        & candidates["_closing_ts"].notna()
-        & candidates["_release_ts"].le(candidates["_closing_ts"])
+        & (
+            candidates["_closing_ts"].isna()
+            | candidates["_release_ts"].le(candidates["_closing_ts"])
+        )
     ].copy()
     latest = candidates.sort_values(["game_key", "_release_ts"]).groupby(
         "game_key", as_index=False
@@ -266,6 +279,11 @@ def grade_completed_games(
     merged["model_edge_at_close"] = (
         merged["fair_home_spread"] - merged["closing_home_spread"]
     ).abs()
+    merged["closing_status"] = np.where(
+        merged["_closing_ts"].notna(),
+        "CAPTURED",
+        "MISSING_NOT_BACKFILLED",
+    )
     merged["graded_timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     merged = merged.drop(columns=["_release_ts", "_closing_ts"], errors="ignore")
     combined = pd.concat([existing_grades, merged], ignore_index=True)

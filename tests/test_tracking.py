@@ -148,3 +148,33 @@ def test_pass_is_not_graded_as_an_away_pick():
     assert grades.loc[0, "model_selected_side"] == "PASS"
     assert grades.loc[0, "ats_result_at_release"] == "Pass"
     assert pd.isna(grades.loc[0, "clv_points"])
+
+
+def test_final_score_is_graded_when_close_was_not_captured():
+    board = pd.DataFrame(
+        [{
+            "season": 2026,
+            "week": 1,
+            "game_key": GAME_KEY,
+            "away_team": "WAS",
+            "home_team": "PHI",
+            "fair_home_spread": -6.0,
+        }]
+    )
+    releases = build_release_records(
+        board, quotes("2026-09-13T15:00:00Z"), "2026-09-13T15:00:00Z"
+    )
+    results = pd.DataFrame(
+        [{"game_key": GAME_KEY, "away_score": 27, "home_score": 7}]
+    )
+
+    grades = grade_completed_games(
+        releases, pd.DataFrame(), results, pd.DataFrame()
+    )
+
+    assert len(grades) == 1
+    assert grades.loc[0, "ats_result_at_release"] == "Loss"
+    assert grades.loc[0, "projection_abs_error"] == 26.0
+    assert grades.loc[0, "closing_status"] == "MISSING_NOT_BACKFILLED"
+    assert pd.isna(grades.loc[0, "closing_bet_spread"])
+    assert pd.isna(grades.loc[0, "clv_points"])
