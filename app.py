@@ -48,14 +48,16 @@ def load_csv(path_string):
 )
 def cached_live_refresh(
     refresh_bucket,
+    season,
+    week,
     active_game_keys,
 ):
     del refresh_bucket
 
     return fetch_live_lines(
         api_key=st.secrets["PARLAY_API_KEY"],
-        season=2026,
-        week=1,
+        season=season,
+        week=week,
         active_game_keys=set(active_game_keys),
     )
 
@@ -136,11 +138,11 @@ def signal_icon(signal):
     }.get(str(signal), str(signal))
 
 
-board_path = locate_file(
+board_path = locate_file("current_live_board.csv") or locate_file(
     "week_01_live_board.csv"
 )
 
-lines_path = locate_file(
+lines_path = locate_file("current_book_lines.csv") or locate_file(
     "week_01_book_lines.csv"
 )
 
@@ -148,9 +150,11 @@ validation_path = locate_file(
     "model_validation.csv"
 )
 
-openers_path = locate_file(
+openers_path = locate_file("current_openers.csv") or locate_file(
     "week_01_openers.csv"
 )
+
+grades_path = locate_file("game_grades.csv")
 
 missing = []
 
@@ -189,9 +193,18 @@ openers = load_csv(
     str(openers_path)
 )
 
+game_grades = (
+    load_csv(str(grades_path))
+    if grades_path is not None
+    else pd.DataFrame()
+)
+
+active_season = int(base_board["season"].iloc[0]) if "season" in base_board else 2026
+active_week = int(base_board["week"].iloc[0])
+
 active_game_keys = tuple(
     sorted(
-        f"2026_W1_{row.away_team}_{row.home_team}"
+        f"{active_season}_W{active_week}_{row.away_team}_{row.home_team}"
         for row in base_board.itertuples()
     )
 )
@@ -286,6 +299,8 @@ if refresh_clicked:
             live_lines, metadata = (
                 cached_live_refresh(
                     refresh_bucket,
+                    active_season,
+                    active_week,
                     active_game_keys,
                 )
             )
@@ -672,7 +687,7 @@ show_stale_betmgm = st.sidebar.checkbox(
 
 st.sidebar.divider()
 st.sidebar.write(
-    "Production version: **Core V2 Week 1**"
+    f"Production version: **Core V2 {active_season} Week {active_week}**"
 )
 st.sidebar.write(
     "PVAR personnel layer: **Active**"
@@ -1369,6 +1384,8 @@ with tab5:
     )
 
 with tab6:
+    st.subheader("Historical Validation")
+
     result = validation.iloc[0]
 
     p1, p2, p3, p4 = st.columns(4)
@@ -1421,8 +1438,82 @@ with tab6:
     st.markdown(
         """
         Core V2 is currently an independent football
-        model and disagreement monitor. During 2026,
+        model and disagreement monitor. During the season,
         the dashboard will track whether its identified
         sides consistently beat the closing line.
         """
     )
+
+    st.divider()
+    st.subheader("2026 Live Tracking")
+
+    if game_grades.empty:
+        st.info(
+            "Live grades will appear after a game has both an automated "
+            "pre-kickoff closing snapshot and a final score."
+        )
+    else:
+        live = game_grades.copy()
+        for column in [
+            "projection_abs_error",
+            "clv_points",
+            "release_bet_spread",
+            "closing_bet_spread",
+        ]:
+            live[column] = pd.to_numeric(live[column], errors="coerce")
+
+        graded_picks = live.loc[
+            live["ats_result_at_release"].isin(["Win", "Loss", "Push"])
+        ].copy()
+        wins = int(graded_picks["ats_result_at_release"].eq("Win").sum())
+        losses = int(graded_picks["ats_result_at_release"].eq("Loss").sum())
+        pushes = int(graded_picks["ats_result_at_release"].eq("Push").sum())
+        decisions = wins + losses
+        cover_rate = wins / decisions if decisions else float("nan")
+
+        l1, l2, l3, l4 = st.columns(4)
+        l1.metric("Games Graded", len(live))
+        l2.metric("Live Projection MAE", f'{live["projection_abs_error"].mean():.2f}')
+        l3.metric(
+            "Release ATS",
+            f"{wins}-{losses}-{pushes}",
+            f"{100 * cover_rate:.1f}%" if pd.notna(cover_rate) else "—",
+        )
+        l4.metric(
+            "Average CLV",
+            (
+                f'{graded_picks["clv_points"].mean():+.2f} pts'
+                if graded_picks["clv_points"].notna().any()
+                else "—"
+            ),
+        )
+
+        tracking_table = pd.DataFrame(
+            {
+                "Week": live["week"].astype(int),
+                "Matchup": live["away_team"] + " @ " + live["home_team"],
+                "Model side": live["model_selected_team"],
+                "Release line": live["release_bet_spread"].map(
+                    lambda value: format_spread(value) if pd.notna(value) else "PASS"
+                ),
+                "Closing line": live["closing_bet_spread"].map(
+                    lambda value: format_spread(value) if pd.notna(value) else "—"
+                ),
+                "CLV": live["clv_points"].map(
+                    lambda value: f"{value:+.1f}" if pd.notna(value) else "—"
+                ),
+                "ATS": live["ats_result_at_release"],
+                "Projection error": live["projection_abs_error"].map(
+                    lambda value: f"{value:.1f}" if pd.notna(value) else "—"
+                ),
+            }
+        )
+        st.dataframe(
+            tracking_table.sort_values(["Week", "Matchup"], ascending=[False, True]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            "CLV compares the market consensus at the published model release "
+            "with the automated pre-kickoff consensus. Positive is favorable."
+        )

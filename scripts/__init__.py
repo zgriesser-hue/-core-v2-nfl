@@ -1,1 +1,1 @@
-"""Core V2 command-line scripts."""
+"""Command-line entry points for Core V2 automation."""

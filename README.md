@@ -15,6 +15,10 @@ This repository separates the production NFL model from the Colab research noteb
 - Applies a small, auditable weekly override table for breaking news and QB changes
   that precede the official injury report.
 - Keeps the existing 15-minute in-app live-line cache, so repeated clicks in the same window do not consume another API request.
+- Locks the model side and market consensus whenever a projection board is published.
+- Captures one immutable core-book closing consensus shortly before each kickoff.
+- Imports final scores, grades projection error and ATS results, and calculates CLV
+  without changing prior game records.
 
 ## Important definition
 
@@ -34,6 +38,20 @@ manually. It writes a candidate personnel layer and projection board but does no
 promote them to Streamlit. Missing reports and unresolved material roles remain
 explicitly provisional. After reviewing the candidate, run `Validate and publish
 weekly projections` for that season/week.
+
+`Capture pre-kickoff closing lines` wakes only around normal NFL kickoff windows.
+It checks the schedule and existing close history before making a request. A run with
+no uncovered game 5–50 minutes from kickoff uses zero ParlayAPI credits. Each game is
+closed once; BetMGM is excluded and at least two core books are required.
+
+`Grade completed games` runs Monday through Wednesday. It imports final scores and
+appends one permanent grade per game after both a release record and closing record
+exist. The Streamlit Model Performance tab then shows live-season MAE, the ATS record,
+and average closing-line value. Historical validation remains displayed separately.
+
+Every manual `Validate and publish weekly projections` run uses one ParlayAPI request
+to lock the current market alongside that exact model release. Releases after the
+recorded close are never used as the CLV entry reference.
 
 ## Local commands
 
