@@ -1,0 +1,76 @@
+name: Refresh weekly personnel
+
+on:
+  schedule:
+    - cron: "30 20 * * 3,4,5,6"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: NFL season
+        required: true
+        default: "2026"
+      week:
+        description: Week number; leave blank to resolve the active week
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: core-v2-personnel-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SEASON: ${{ inputs.season || '2026' }}
+      TARGET_WEEK: ${{ inputs.week }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q
+      - name: Build frozen personnel layer
+        shell: bash
+        run: |
+          if [ -z "$TARGET_WEEK" ]; then
+            TARGET_WEEK=$(python -m scripts.resolve_week --mode active --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
+          fi
+          echo "TARGET_WEEK=$TARGET_WEEK" >> "$GITHUB_ENV"
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          OUTPUT_DIR="data/production/${TARGET_SEASON}/week_${WEEK_PADDED}"
+          python -m scripts.build_personnel \
+            --season "$TARGET_SEASON" \
+            --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --roles "data/model/player_role_priors_${TARGET_SEASON}.csv" \
+            --weekly-adjustments "data/model/weekly_team_adjustments_${TARGET_SEASON}.csv" \
+            --output-dir "$OUTPUT_DIR"
+      - name: Validate candidate projection board
+        shell: bash
+        run: |
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          python -m scripts.build_week \
+            --season "$TARGET_SEASON" \
+            --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --ratings "data/model/team_ratings_${TARGET_SEASON}.csv" \
+            --personnel "data/production/${TARGET_SEASON}/week_${WEEK_PADDED}/personnel_adjustments.csv" \
+            --locks data/model/historical_projection_locks.csv \
+            --output "data/production/${TARGET_SEASON}/week_${WEEK_PADDED}/candidate_projection_board.csv"
+      - name: Commit reviewed-formula personnel data
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain data/production)" ]; then
+            echo "Personnel snapshot is unchanged"
+            exit 0
+          fi
+          git config user.name "core-v2-automation"
+          git config user.email "core-v2-automation@users.noreply.github.com"
+          git add data/production
+          git commit -m "data: refresh Core V2 weekly personnel"
+          git push
