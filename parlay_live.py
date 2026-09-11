@@ -904,3 +904,74 @@ def rebuild_board(base_board, lines):
         "edge_points",
         ascending=False,
     ).reset_index(drop=True)
+    def select_pregame_game_keys(
+    board,
+    schedule=None,
+    completed_game_keys=None,
+    now_utc=None,
+):
+    if board.empty:
+        return tuple()
+
+    keys = set(
+        board["game_key"].dropna().astype(str)
+    )
+
+    keys -= {
+        str(key)
+        for key in (completed_game_keys or set())
+    }
+
+    if schedule is None or schedule.empty:
+        return tuple(sorted(keys))
+
+    games = schedule.copy()
+    games["_game_key"] = games.apply(
+        lambda row: (
+            f"{int(row['season'])}_W{int(row['week'])}_"
+            f"{norm_team(row['away_team'])}_"
+            f"{norm_team(row['home_team'])}"
+        ),
+        axis=1,
+    )
+
+    games = games.loc[
+        games["_game_key"].isin(keys)
+    ].copy()
+
+    if "kickoff_utc" in games.columns:
+        kickoffs = pd.to_datetime(
+            games["kickoff_utc"],
+            errors="coerce",
+            utc=True,
+        )
+    else:
+        local_times = pd.to_datetime(
+            games["gameday"].astype(str)
+            + " "
+            + games["gametime"].fillna("00:00").astype(str),
+            errors="coerce",
+        )
+        kickoffs = local_times.dt.tz_localize(
+            "America/New_York"
+        ).dt.tz_convert("UTC")
+
+    now = pd.Timestamp(
+        now_utc
+        if now_utc is not None
+        else pd.Timestamp.now(tz="UTC")
+    )
+
+    if now.tzinfo is None:
+        now = now.tz_localize("UTC")
+    else:
+        now = now.tz_convert("UTC")
+
+    started = set(
+        games.loc[
+            kickoffs.le(now),
+            "_game_key",
+        ]
+    )
+
+    return tuple(sorted(keys - started))
