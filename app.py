@@ -17,12 +17,14 @@ from parlay_live import (
     format_spread,
     rebuild_board,
 )
+from parlay_live import select_pregame_game_keys
 
 st.set_page_config(
     page_title="Core V2 NFL Dashboard",
     page_icon="🏈",
     layout="wide",
 )
+
 
 ROOT = Path(__file__).parent
 
@@ -211,12 +213,32 @@ game_grades = (
 active_season = int(base_board["season"].iloc[0]) if "season" in base_board else 2026
 active_week = int(base_board["week"].iloc[0])
 
-active_game_keys = tuple(
-    sorted(
-        f"{active_season}_W{active_week}_{row.away_team}_{row.home_team}"
-        for row in base_board.itertuples()
+completed_game_keys = set(
+    game_grades.get(
+        "game_key",
+        pd.Series(dtype=str),
     )
+    .dropna()
+    .astype(str)
 )
+
+schedule = pd.read_csv(
+    ROOT / "data/schedules/schedule_2026.csv",
+    low_memory=False,
+)
+
+active_game_keys = select_pregame_game_keys(
+    base_board,
+    schedule=schedule,
+    completed_game_keys=completed_game_keys,
+)
+
+base_board = base_board.loc[
+    base_board["game_key"]
+    .astype(str)
+    .isin(active_game_keys)
+].copy()
+
 
 if "live_lines" not in st.session_state:
     st.session_state.live_lines = None
