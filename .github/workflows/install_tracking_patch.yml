@@ -1,0 +1,48 @@
+name: Install closing and grading automation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install patch files
+        shell: bash
+        run: |
+          PATCH_FILE=$(find . -type f -name 'core_v2_tracking_automation_patch.zip' -print -quit)
+          test -n "$PATCH_FILE"
+          unzip -o "$PATCH_FILE" -d .
+          rm "$PATCH_FILE"
+          test -f core_v2/tracking.py
+          test -f scripts/capture_closings.py
+          test -f scripts/capture_release.py
+          test -f scripts/grade_results.py
+          test -f tests/test_tracking.py
+          test -f data/tracking/projection_releases.csv
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q
+      - run: python -m py_compile app.py parlay_live.py core_v2/*.py scripts/*.py
+      - name: Commit validated tracking automation
+        shell: bash
+        run: |
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type d -name .pytest_cache -prune -exec rm -rf {} +
+          git config user.name "core-v2-automation"
+          git config user.email "core-v2-automation@users.noreply.github.com"
+          git add app.py README.md core_v2 scripts tests data/tracking
+          git add -u
+          if git diff --cached --quiet; then
+            echo "Tracking patch is already installed"
+            exit 0
+          fi
+          git commit -m "feat: add closing-line and result tracking"
+          git push
