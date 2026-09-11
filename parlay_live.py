@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -191,7 +190,7 @@ def decimal_to_american(value):
 
 def format_spread(value):
     if pd.isna(value):
-        return "—"
+        return "â"
 
     value = float(value)
 
@@ -206,7 +205,7 @@ def format_spread(value):
 
 def format_american(value):
     if pd.isna(value):
-        return "—"
+        return "â"
 
     value = int(round(float(value)))
     return f"+{value}" if value > 0 else str(value)
@@ -524,10 +523,10 @@ def fetch_live_lines(api_key, season, week, active_game_keys):
             quotes["quote_age_minutes"] > 15,
         ],
         [
-            "STALE BOOK — VERIFY",
+            "STALE BOOK â VERIFY",
             "UNKNOWN TIMESTAMP",
-            "OLD — VERIFY",
-            "AGING — VERIFY",
+            "OLD â VERIFY",
+            "AGING â VERIFY",
         ],
         default="FRESH",
     )
@@ -698,7 +697,7 @@ def rebuild_board(base_board, lines):
     board["edge_bucket"] = pd.cut(
         board["edge_points"],
         bins=[-np.inf, 1, 2, 3, np.inf],
-        labels=["<1", "1–2", "2–3", "3+"],
+        labels=["<1", "1â2", "2â3", "3+"],
         right=False,
     ).astype(str)
 
