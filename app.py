@@ -1,5 +1,6 @@
 
 import time
+from io import BytesIO
 
 CORE_V2_LINE_MOVEMENT_V1 = True
 CORE_V2_OPENER_MOVEMENT_V1 = True
@@ -38,8 +39,16 @@ def locate_file(filename):
 
 
 @st.cache_data
+def load_csv_bytes(file_bytes):
+    return pd.read_csv(BytesIO(file_bytes))
+
+
 def load_csv(path_string):
-    return pd.read_csv(path_string)
+    # Cache by file contents, not only by an unchanged path. GitHub automation
+    # replaces CSVs in place, so this automatically invalidates stale data.
+    return load_csv_bytes(
+        Path(path_string).read_bytes()
+    )
 
 
 @st.cache_data(
