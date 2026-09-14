@@ -5,6 +5,7 @@ from core_v2.personnel_v2 import (
     POSITION_GROUPS,
     add_v2_shadow_features,
     build_personnel_v2_shadow,
+    load_v2_role_repairs,
     normalize_position_group,
 )
 
@@ -129,3 +130,83 @@ def test_stale_roster_status_is_sent_to_review():
     )
     decorated = add_v2_shadow_features(audit)
     assert decorated.loc[0, "role_quality_flag"] == "STALE_ROSTER_STATUS"
+
+
+def test_reviewed_repair_changes_only_v2_shadow():
+    schedule = pd.DataFrame(
+        [{"game_id": "2026_02_NE_NYJ", "away_team": "NE", "home_team": "NYJ"}]
+    )
+    audit = pd.DataFrame(
+        [
+            {
+                "team": "NE",
+                "player_name": "Example Edge",
+                "name_key": "example edge",
+                "position_reported": "LB",
+                "matched_position": "LB",
+                "expected_role": 0.001,
+                "weighted_role_exposure": 0.001,
+                "status_weight": 1.0,
+                "roster_status": "ACT",
+                "match_method": "EXACT",
+                "is_qb": False,
+                "excluded_manual_overlap": False,
+            }
+        ]
+    )
+    repairs = pd.DataFrame(
+        [
+            {
+                "team": "NE",
+                "name_key": "example edge",
+                "position_group_v2": "EDGE",
+                "role_v2": 0.60,
+                "repair_method": "validated_test",
+                "evidence_source": "test",
+                "review_status": "APPROVED_FOR_V2_SHADOW",
+            }
+        ]
+    )
+
+    shadow, decorated = build_personnel_v2_shadow(
+        schedule, audit, 2026, 2, repairs
+    )
+    player = decorated.iloc[0]
+
+    assert player["expected_role"] == pytest.approx(0.001)
+    assert player["weighted_role_exposure"] == pytest.approx(0.001)
+    assert player["expected_role_v1"] == pytest.approx(0.001)
+    assert player["expected_role_v2"] == pytest.approx(0.60)
+    assert player["position_group"] == "EDGE"
+    assert player["role_quality_flag"] == "V2_ROLE_REPAIRED"
+
+    edge = shadow.loc[
+        shadow["team"].eq("NE") & shadow["position_group"].eq("EDGE")
+    ].iloc[0]
+    assert edge["known_weighted_role_exposure"] == pytest.approx(0.60)
+    assert edge["review_count"] == 0
+
+
+def test_role_repair_loader_respects_week_window(tmp_path):
+    path = tmp_path / "repairs.csv"
+    pd.DataFrame(
+        [
+            {
+                "season": 2026,
+                "start_week": 2,
+                "end_week": 18,
+                "player_name": "Example Edge",
+                "team": "NE",
+                "position_group_v2": "EDGE",
+                "role_v2": 0.60,
+                "repair_method": "validated_test",
+                "evidence_source": "test",
+                "review_status": "APPROVED_FOR_V2_SHADOW",
+            }
+        ]
+    ).to_csv(path, index=False)
+
+    assert load_v2_role_repairs(path, 2026, 1).empty
+    week_two = load_v2_role_repairs(path, 2026, 2)
+    assert len(week_two) == 1
+    assert week_two.iloc[0]["name_key"] == "example edge"
