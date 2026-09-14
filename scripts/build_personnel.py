@@ -13,7 +13,7 @@ from core_v2.personnel import (
     load_role_priors,
     load_weekly_team_adjustments,
 )
-from core_v2.personnel_v2 import build_personnel_v2_shadow
+from core_v2.personnel_v2 import build_personnel_v2_shadow, load_v2_role_repairs
 from core_v2.projections import load_week_schedule
 
 
@@ -24,6 +24,7 @@ def main() -> None:
     parser.add_argument("--schedule", type=Path, required=True)
     parser.add_argument("--roles", type=Path, required=True)
     parser.add_argument("--weekly-adjustments", type=Path)
+    parser.add_argument("--v2-role-repairs", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
@@ -32,11 +33,12 @@ def main() -> None:
     injuries, report_teams = fetch_nfl_injury_report(args.season, args.week, valid_teams)
     roles = load_role_priors(args.roles)
     weekly = load_weekly_team_adjustments(args.weekly_adjustments, args.season, args.week)
+    v2_repairs = load_v2_role_repairs(args.v2_role_repairs, args.season, args.week)
     personnel, audit = build_personnel_adjustments(
         schedule, roles, injuries, report_teams, weekly, args.season, args.week
     )
     shadow, audit = build_personnel_v2_shadow(
-        schedule, audit, args.season, args.week
+        schedule, audit, args.season, args.week, v2_repairs
     )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)

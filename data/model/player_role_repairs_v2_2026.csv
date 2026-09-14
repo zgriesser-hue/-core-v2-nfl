@@ -1,0 +1,14 @@
+season,start_week,end_week,player_name,team,position_group_v2,role_v1,role_v2,repair_method,evidence_source,review_status
+2026,2,18,Cameron Williams,ATL,OL,0.000,0.000,reviewed_no_repair_rt_depth4,2025_depth_rank_calibration_median,APPROVED_FOR_V2_SHADOW
+2026,2,18,Za'Darius Smith,ATL,EDGE,0.001,0.546,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,Nnamdi Madubuike,BAL,IDL,0.000,0.509,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,Patrick Jones II,CAR,EDGE,0.003,0.348,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,Kayden McDonald,HOU,IDL,,0.100,rookie_depth_fallback_idl3,2025_left_dt_depth3_mean,APPROVED_FOR_V2_SHADOW
+2026,2,18,L'Jarius Sneed,KC,DB,0.006,0.628,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,Aaron Donald,LA,IDL,0.000,0.645,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,Harrison Smith,MIN,DB,,0.888,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,Oscar Delp,NO,WR_TE,,0.190,rookie_depth_fallback_te3,2025_te_depth3_median,APPROVED_FOR_V2_SHADOW
+2026,2,18,Malik Nabers,NYG,WR_TE,0.001,0.493,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,Eli Stowers,PHI,WR_TE,,0.190,rookie_depth_fallback_te3,2025_te_depth3_median,APPROVED_FOR_V2_SHADOW
+2026,2,18,Nick Bosa,SF,EDGE,0.000,0.592,career_mean_active_stale_prior,pvar_historical_player_season_signals,APPROVED_FOR_V2_SHADOW
+2026,2,18,James Thompson Jr.,SF,IDL,,,unresolved_no_history_no_depth,none,REMAINS_UNRESOLVED
