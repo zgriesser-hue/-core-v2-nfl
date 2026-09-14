@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+from .personnel import normalize_player_name
 
 
 POSITION_GROUPS = ("OL", "WR_TE", "RB", "EDGE", "IDL", "LB", "DB", "ST", "OTHER")
@@ -45,6 +49,108 @@ def normalize_position_group(value: object) -> str:
     return _POSITION_GROUP_MAP.get(position, "OTHER")
 
 
+def load_v2_role_repairs(
+    path: Path | None,
+    season: int,
+    week: int,
+) -> pd.DataFrame:
+    """Load reviewed role repairs for a single season/week."""
+    columns = [
+        "season", "start_week", "end_week", "player_name", "team",
+        "position_group_v2", "role_v1", "role_v2", "repair_method",
+        "evidence_source", "review_status", "name_key",
+    ]
+    if path is None or not Path(path).exists():
+        return pd.DataFrame(columns=columns)
+
+    repairs = pd.read_csv(path)
+    required = {
+        "season", "start_week", "end_week", "player_name", "team",
+        "position_group_v2", "role_v2", "repair_method",
+        "evidence_source", "review_status",
+    }
+    missing = required - set(repairs.columns)
+    if missing:
+        raise ValueError(f"V2 role repairs missing columns: {sorted(missing)}")
+
+    for column in ("season", "start_week", "end_week"):
+        repairs[column] = pd.to_numeric(repairs[column], errors="raise").astype(int)
+    repairs["role_v2"] = pd.to_numeric(repairs["role_v2"], errors="coerce")
+    repairs["team"] = repairs["team"].astype(str).str.upper().str.strip()
+    repairs["position_group_v2"] = (
+        repairs["position_group_v2"].astype(str).str.upper().str.strip()
+    )
+    repairs["name_key"] = repairs["player_name"].map(normalize_player_name)
+    repairs = repairs.loc[
+        repairs["season"].eq(int(season))
+        & repairs["start_week"].le(int(week))
+        & repairs["end_week"].ge(int(week))
+    ].copy()
+
+    approved = repairs["review_status"].eq("APPROVED_FOR_V2_SHADOW")
+    if not repairs.loc[approved, "role_v2"].between(0, 1, inclusive="both").all():
+        raise ValueError("Approved V2 role repairs must be between 0 and 1")
+    if repairs.duplicated(["team", "name_key"]).any():
+        raise ValueError("Duplicate active V2 role repairs")
+    return repairs
+
+
+def apply_v2_role_repairs(
+    audit: pd.DataFrame,
+    repairs: pd.DataFrame | None,
+) -> pd.DataFrame:
+    """Apply reviewed values to shadow columns while preserving all V1 fields."""
+    frame = audit.copy()
+    frame["expected_role_v1"] = pd.to_numeric(
+        frame.get("expected_role"), errors="coerce"
+    )
+    frame["expected_role_v2"] = frame["expected_role_v1"]
+    frame["weighted_role_exposure_v1"] = pd.to_numeric(
+        frame.get("weighted_role_exposure"), errors="coerce"
+    )
+    frame["position_group_v2_override"] = None
+    frame["v2_role_repair_applied"] = False
+    frame["v2_role_repair_method"] = None
+    frame["v2_role_evidence_source"] = None
+    frame["v2_role_review_status"] = None
+
+    if not frame.empty and repairs is not None and not repairs.empty:
+        if "name_key" not in frame:
+            frame["name_key"] = frame["player_name"].map(normalize_player_name)
+        lookup = repairs.set_index(["team", "name_key"], drop=False)
+        for index, row in frame.iterrows():
+            key = (str(row["team"]).upper().strip(), str(row["name_key"]))
+            if key not in lookup.index:
+                continue
+            repair = lookup.loc[key]
+            frame.at[index, "position_group_v2_override"] = repair[
+                "position_group_v2"
+            ]
+            frame.at[index, "v2_role_repair_method"] = repair["repair_method"]
+            frame.at[index, "v2_role_evidence_source"] = repair["evidence_source"]
+            frame.at[index, "v2_role_review_status"] = repair["review_status"]
+            approved = (
+                repair["review_status"] == "APPROVED_FOR_V2_SHADOW"
+                and pd.notna(repair["role_v2"])
+            )
+            if approved:
+                frame.at[index, "expected_role_v2"] = float(repair["role_v2"])
+                frame.at[index, "v2_role_repair_applied"] = True
+
+    is_qb = frame.get("is_qb", pd.Series(False, index=frame.index)).fillna(False).astype(bool)
+    excluded = frame.get(
+        "excluded_manual_overlap", pd.Series(False, index=frame.index)
+    ).fillna(False).astype(bool)
+    status_weight = pd.to_numeric(frame.get("status_weight"), errors="coerce")
+    eligible = ~is_qb & ~excluded
+    frame["weighted_role_exposure_v2"] = np.where(
+        eligible & frame["expected_role_v2"].notna(),
+        status_weight * frame["expected_role_v2"],
+        np.nan,
+    )
+    return frame
+
+
 def add_v2_shadow_features(audit: pd.DataFrame) -> pd.DataFrame:
     """Add V2 diagnostics without changing the production personnel correction."""
     frame = audit.copy()
@@ -67,9 +173,20 @@ def add_v2_shadow_features(audit: pd.DataFrame) -> pd.DataFrame:
         matched_position.notna() & matched_position.astype(str).str.strip().ne(""),
         reported_position,
     )
-    frame["position_group"] = preferred_position.map(normalize_position_group)
+    inferred_group = preferred_position.map(normalize_position_group)
+    override_group = frame.get(
+        "position_group_v2_override",
+        pd.Series(index=frame.index, dtype=object),
+    )
+    frame["position_group"] = override_group.where(
+        override_group.notna() & override_group.astype(str).str.strip().ne(""),
+        inferred_group,
+    )
 
-    expected_role = pd.to_numeric(frame.get("expected_role"), errors="coerce")
+    expected_role = pd.to_numeric(
+        frame.get("expected_role_v2", frame.get("expected_role")),
+        errors="coerce",
+    )
     roster_status = (
         frame.get("roster_status", pd.Series(index=frame.index, dtype=object))
         .fillna("")
@@ -87,9 +204,14 @@ def add_v2_shadow_features(audit: pd.DataFrame) -> pd.DataFrame:
         "excluded_manual_overlap", pd.Series(False, index=frame.index)
     ).fillna(False).astype(bool)
 
+    repair_applied = frame.get(
+        "v2_role_repair_applied", pd.Series(False, index=frame.index)
+    ).fillna(False).astype(bool)
     conditions = [
         is_qb,
         excluded,
+        repair_applied & expected_role.eq(0),
+        repair_applied,
         expected_role.isna(),
         expected_role.lt(0) | expected_role.gt(1),
         roster_status.ne("") & ~roster_status.eq("ACT"),
@@ -99,6 +221,8 @@ def add_v2_shadow_features(audit: pd.DataFrame) -> pd.DataFrame:
     labels = [
         "EXCLUDED_QB",
         "EXCLUDED_MANUAL_OVERLAP",
+        "REVIEWED_ZERO_ROLE",
+        "V2_ROLE_REPAIRED",
         "UNRESOLVED_ROLE",
         "INVALID_ROLE_RANGE",
         "STALE_ROSTER_STATUS",
@@ -115,25 +239,37 @@ def build_personnel_v2_shadow(
     audit: pd.DataFrame,
     season: int,
     week: int,
+    role_repairs: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build a complete game/team/position shadow matrix for later coefficient fitting."""
-    decorated = add_v2_shadow_features(audit)
+    repaired = apply_v2_role_repairs(audit, role_repairs)
+    decorated = add_v2_shadow_features(repaired)
     eligible = decorated.loc[decorated["v2_shadow_eligible"]].copy()
 
     aggregate: dict[tuple[str, str], dict[str, float | int]] = {}
     if not eligible.empty:
+        role_column = (
+            "expected_role_v2" if "expected_role_v2" in eligible else "expected_role"
+        )
+        exposure_column = (
+            "weighted_role_exposure_v2"
+            if "weighted_role_exposure_v2" in eligible
+            else "weighted_role_exposure"
+        )
         eligible["expected_role_numeric"] = pd.to_numeric(
-            eligible["expected_role"], errors="coerce"
+            eligible[role_column], errors="coerce"
         )
         eligible["weighted_role_exposure_numeric"] = pd.to_numeric(
-            eligible["weighted_role_exposure"], errors="coerce"
+            eligible[exposure_column], errors="coerce"
         )
         eligible["unresolved_status_weight"] = np.where(
             eligible["expected_role_numeric"].isna(),
             pd.to_numeric(eligible["status_weight"], errors="coerce").fillna(0.0),
             0.0,
         )
-        eligible["review_required"] = ~eligible["role_quality_flag"].isin({"OK"})
+        eligible["review_required"] = ~eligible["role_quality_flag"].isin(
+            {"OK", "V2_ROLE_REPAIRED", "REVIEWED_ZERO_ROLE"}
+        )
         eligible["low_role_prior"] = eligible["role_quality_flag"].eq(
             "ACTIVE_LOW_ROLE_PRIOR"
         )
