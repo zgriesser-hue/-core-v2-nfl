@@ -53,6 +53,7 @@ jobs:
             --week "$TARGET_WEEK" \
             --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
             --roles "data/model/player_role_priors_${TARGET_SEASON}.csv" \
+            --v2-role-repairs "data/model/player_role_repairs_v2_${TARGET_SEASON}.csv" \
             --weekly-adjustments "data/model/weekly_team_adjustments_${TARGET_SEASON}.csv" \
             --output-dir "$OUTPUT_DIR"
       - name: Build and lock production projection board
