@@ -1,10 +1,6 @@
 name: Refresh weekly personnel
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/refresh_personnel.yml"
   schedule:
     - cron: "30 20 * * 3,4,5,6"
   workflow_dispatch:
@@ -44,11 +40,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "$TARGET_WEEK" ]; then
-            RESOLVE_MODE="active"
-            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-              RESOLVE_MODE="next"
-            fi
-            TARGET_WEEK=$(python -m scripts.resolve_week --mode "$RESOLVE_MODE" --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
+            TARGET_WEEK=$(python -m scripts.resolve_week --mode active --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
           fi
           echo "TARGET_WEEK=$TARGET_WEEK" >> "$GITHUB_ENV"
           WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
