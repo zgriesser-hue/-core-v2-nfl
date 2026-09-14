@@ -27,6 +27,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
       TARGET_SEASON: ${{ inputs.season || '2026' }}
