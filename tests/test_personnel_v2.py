@@ -111,3 +111,21 @@ def test_qbs_stay_out_of_non_qb_shadow():
     assert decorated.loc[0, "position_group"] == "QB"
     assert decorated.loc[0, "role_quality_flag"] == "EXCLUDED_QB"
     assert not bool(decorated.loc[0, "v2_shadow_eligible"])
+
+
+def test_stale_roster_status_is_sent_to_review():
+    audit = pd.DataFrame(
+        [
+            {
+                "position_reported": "DT",
+                "matched_position": "IDL",
+                "expected_role": 0.001,
+                "roster_status": "EXE",
+                "match_method": "EXACT",
+                "is_qb": False,
+                "excluded_manual_overlap": False,
+            }
+        ]
+    )
+    decorated = add_v2_shadow_features(audit)
+    assert decorated.loc[0, "role_quality_flag"] == "STALE_ROSTER_STATUS"
