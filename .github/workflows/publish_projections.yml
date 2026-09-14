@@ -1,6 +1,12 @@
 name: Validate and publish weekly projections
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/publish_projections.yml"
+  schedule:
+    - cron: "0 12 * * 1"
   workflow_dispatch:
     inputs:
       season:
@@ -8,16 +14,23 @@ on:
         required: true
         default: "2026"
       week:
-        description: NFL week
-        required: true
-        default: "1"
+        description: NFL week; leave blank to resolve the next future week
+        required: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: core-v2-projection-publish
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
+      TARGET_SEASON: ${{ inputs.season || '2026' }}
+      TARGET_WEEK: ${{ inputs.week }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,11 +39,27 @@ jobs:
           cache: pip
       - run: python -m pip install -e ".[test]"
       - run: python -m pytest -q
-      - name: Build production projection board
+      - name: Resolve target week
         shell: bash
-        env:
-          TARGET_SEASON: ${{ inputs.season }}
-          TARGET_WEEK: ${{ inputs.week }}
+        run: |
+          if [ -z "$TARGET_WEEK" ]; then
+            TARGET_WEEK=$(python -m scripts.resolve_week --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
+          fi
+          echo "TARGET_WEEK=$TARGET_WEEK" >> "$GITHUB_ENV"
+      - name: Build early personnel snapshot
+        shell: bash
+        run: |
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          OUTPUT_DIR="data/production/${TARGET_SEASON}/week_${WEEK_PADDED}"
+          python -m scripts.build_personnel \
+            --season "$TARGET_SEASON" \
+            --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --roles "data/model/player_role_priors_${TARGET_SEASON}.csv" \
+            --weekly-adjustments "data/model/weekly_team_adjustments_${TARGET_SEASON}.csv" \
+            --output-dir "$OUTPUT_DIR"
+      - name: Build and lock production projection board
+        shell: bash
         run: |
           WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
           python -m scripts.publish_week \
@@ -43,19 +72,26 @@ jobs:
             --output current_live_board.csv
           cp "data/market/${TARGET_SEASON}/week_${WEEK_PADDED}/dashboard_openers.csv" current_openers.csv
           cp "data/market/${TARGET_SEASON}/week_${WEEK_PADDED}/latest_book_lines.csv" current_book_lines.csv
+          python -m scripts.capture_release \
+            --season "$TARGET_SEASON" \
+            --week "$TARGET_WEEK" \
+            --board current_live_board.csv \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --history data/tracking/projection_releases.csv \
+            --dashboard-lines current_book_lines.csv
           python -m scripts.validate_dashboard \
             --board current_live_board.csv \
             --lines current_book_lines.csv \
             --openers current_openers.csv
-      - name: Commit validated board
+      - name: Commit validated release
         shell: bash
         run: |
-          if git diff --quiet; then
-            echo "Projection board is unchanged"
+          if [ -z "$(git status --porcelain -- current_live_board.csv current_openers.csv current_book_lines.csv data/production data/tracking/projection_releases.csv)" ]; then
+            echo "Projection release is unchanged"
             exit 0
           fi
           git config user.name "core-v2-automation"
           git config user.email "core-v2-automation@users.noreply.github.com"
-          git add current_live_board.csv current_openers.csv current_book_lines.csv
-          git commit -m "data: publish validated Core V2 projections"
+          git add current_live_board.csv current_openers.csv current_book_lines.csv data/production data/tracking/projection_releases.csv
+          git commit -m "data: publish and lock Core V2 weekly projections"
           git push
