@@ -51,7 +51,7 @@ jobs:
       - name: Commit immutable openers and staged fallback lines
         shell: bash
         run: |
-          if git diff --quiet; then
+          if [ -z "$(git status --porcelain -- data/market)" ]; then
             echo "No new opener records"
             exit 0
           fi
