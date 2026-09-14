@@ -1,6 +1,10 @@
 name: Capture next-week openers
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/capture_openers.yml"
   schedule:
     - cron: "30 11 * * 1"
   workflow_dispatch:
