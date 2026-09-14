@@ -92,6 +92,7 @@ def add_v2_shadow_features(audit: pd.DataFrame) -> pd.DataFrame:
         excluded,
         expected_role.isna(),
         expected_role.lt(0) | expected_role.gt(1),
+        roster_status.ne("") & ~roster_status.eq("ACT"),
         roster_status.eq("ACT") & expected_role.le(0.02),
         match_method.eq("FUZZY_REVIEW"),
     ]
@@ -100,6 +101,7 @@ def add_v2_shadow_features(audit: pd.DataFrame) -> pd.DataFrame:
         "EXCLUDED_MANUAL_OVERLAP",
         "UNRESOLVED_ROLE",
         "INVALID_ROLE_RANGE",
+        "STALE_ROSTER_STATUS",
         "ACTIVE_LOW_ROLE_PRIOR",
         "FUZZY_MATCH_REVIEW",
     ]
