@@ -1,6 +1,10 @@
 name: Refresh weekly personnel
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/refresh_personnel.yml"
   schedule:
     - cron: "30 20 * * 3,4,5,6"
   workflow_dispatch:
@@ -23,7 +27,9 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
+      PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
       TARGET_SEASON: ${{ inputs.season || '2026' }}
       TARGET_WEEK: ${{ inputs.week }}
     steps:
@@ -38,7 +44,11 @@ jobs:
         shell: bash
         run: |
           if [ -z "$TARGET_WEEK" ]; then
-            TARGET_WEEK=$(python -m scripts.resolve_week --mode active --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
+            RESOLVE_MODE="active"
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              RESOLVE_MODE="next"
+            fi
+            TARGET_WEEK=$(python -m scripts.resolve_week --mode "$RESOLVE_MODE" --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
           fi
           echo "TARGET_WEEK=$TARGET_WEEK" >> "$GITHUB_ENV"
           WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
@@ -62,15 +72,47 @@ jobs:
             --personnel "data/production/${TARGET_SEASON}/week_${WEEK_PADDED}/personnel_adjustments.csv" \
             --locks data/model/historical_projection_locks.csv \
             --output "data/production/${TARGET_SEASON}/week_${WEEK_PADDED}/candidate_projection_board.csv"
-      - name: Commit reviewed-formula personnel data
+      - name: Publish and lock changed projections
         shell: bash
         run: |
-          if [ -z "$(git status --porcelain data/production)" ]; then
-            echo "Personnel snapshot is unchanged"
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          CANDIDATE_BOARD="data/production/${TARGET_SEASON}/week_${WEEK_PADDED}/candidate_dashboard.csv"
+          python -m scripts.publish_week \
+            --season "$TARGET_SEASON" \
+            --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --ratings "data/model/team_ratings_${TARGET_SEASON}.csv" \
+            --personnel "data/production/${TARGET_SEASON}/week_${WEEK_PADDED}/personnel_adjustments.csv" \
+            --locks data/model/historical_projection_locks.csv \
+            --output "$CANDIDATE_BOARD"
+          if [ -f current_live_board.csv ] && cmp -s "$CANDIDATE_BOARD" current_live_board.csv; then
+            echo "Projection board is unchanged; no market release captured"
+            rm "$CANDIDATE_BOARD"
+            exit 0
+          fi
+          mv "$CANDIDATE_BOARD" current_live_board.csv
+          cp "data/market/${TARGET_SEASON}/week_${WEEK_PADDED}/dashboard_openers.csv" current_openers.csv
+          cp "data/market/${TARGET_SEASON}/week_${WEEK_PADDED}/latest_book_lines.csv" current_book_lines.csv
+          python -m scripts.capture_release \
+            --season "$TARGET_SEASON" \
+            --week "$TARGET_WEEK" \
+            --board current_live_board.csv \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --history data/tracking/projection_releases.csv \
+            --dashboard-lines current_book_lines.csv
+          python -m scripts.validate_dashboard \
+            --board current_live_board.csv \
+            --lines current_book_lines.csv \
+            --openers current_openers.csv
+      - name: Commit personnel and changed release data
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain -- data/production current_live_board.csv current_openers.csv current_book_lines.csv data/tracking/projection_releases.csv)" ]; then
+            echo "Personnel snapshot and projection board are unchanged"
             exit 0
           fi
           git config user.name "core-v2-automation"
           git config user.email "core-v2-automation@users.noreply.github.com"
-          git add data/production
-          git commit -m "data: refresh Core V2 weekly personnel"
+          git add data/production current_live_board.csv current_openers.csv current_book_lines.csv data/tracking/projection_releases.csv
+          git commit -m "data: refresh personnel and publish changed projections"
           git push
