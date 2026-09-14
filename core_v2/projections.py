@@ -222,8 +222,13 @@ def build_projection_board(
         board.loc[locked, "projection_display_status"] = board.loc[
             locked, "projection_display_status_locked"
         ]
+        locked_provisional = locked & board[
+            "projection_display_status_locked"
+        ].eq("EARLY_PROVISIONAL")
         board.loc[locked, "used_personnel_fallback"] = False
         board.loc[locked, "personnel_info_complete"] = True
+        board.loc[locked_provisional, "used_personnel_fallback"] = True
+        board.loc[locked_provisional, "personnel_info_complete"] = False
 
     board["fair_spread_uncertainty_width"] = (
         board["fair_spread_high"] - board["fair_spread_low"]
