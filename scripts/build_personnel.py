@@ -13,6 +13,7 @@ from core_v2.personnel import (
     load_role_priors,
     load_weekly_team_adjustments,
 )
+from core_v2.personnel_v2 import build_personnel_v2_shadow
 from core_v2.projections import load_week_schedule
 
 
@@ -34,6 +35,9 @@ def main() -> None:
     personnel, audit = build_personnel_adjustments(
         schedule, roles, injuries, report_teams, weekly, args.season, args.week
     )
+    shadow, audit = build_personnel_v2_shadow(
+        schedule, audit, args.season, args.week
+    )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -44,6 +48,7 @@ def main() -> None:
     atomic_write_csv(injuries, args.output_dir / "official_injury_report.csv")
     atomic_write_csv(coverage, args.output_dir / "report_coverage.csv")
     atomic_write_csv(audit, args.output_dir / "personnel_player_audit.csv")
+    atomic_write_csv(shadow, args.output_dir / "personnel_v2_shadow.csv")
     atomic_write_csv(personnel, args.output_dir / "personnel_adjustments.csv")
     complete = int(personnel["report_coverage_complete_clean"].sum())
     print(f"Built {len(personnel)} games; {complete} have complete report/role coverage")
