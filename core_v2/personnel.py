@@ -190,6 +190,8 @@ def _match_roles(report: pd.DataFrame, roles: pd.DataFrame) -> pd.DataFrame:
                 "matched_position": None if match is None else match["position"],
                 "expected_role": np.nan if match is None else match["expected_role"],
                 "role_source": None if match is None else match.get("role_source"),
+                "gsis_id": None if match is None else match.get("gsis_id"),
+                "roster_status": None if match is None else match.get("roster_status"),
                 "match_method": method,
                 "name_similarity": similarity,
             }
@@ -224,6 +226,7 @@ def build_personnel_adjustments(
     audit = _match_roles(model_rows, roles) if not model_rows.empty else model_rows.assign(
         matched_player=pd.Series(dtype=object), matched_position=pd.Series(dtype=object),
         expected_role=pd.Series(dtype=float), role_source=pd.Series(dtype=object),
+        gsis_id=pd.Series(dtype=object), roster_status=pd.Series(dtype=object),
         match_method=pd.Series(dtype=object), name_similarity=pd.Series(dtype=float),
     )
     audit["is_qb"] = (
