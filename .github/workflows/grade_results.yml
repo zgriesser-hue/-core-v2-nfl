@@ -37,15 +37,22 @@ jobs:
             --closings data/tracking/closing_consensus.csv \
             --history data/tracking/game_grades.csv \
             --dashboard-output game_grades.csv
-      - name: Commit new grades
+      - name: Update power ratings through latest fully graded week
+        run: |
+          python -m scripts.update_ratings \
+            --season "$TARGET_SEASON" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --grades data/tracking/game_grades.csv \
+            --ratings "data/model/team_ratings_${TARGET_SEASON}.csv"
+      - name: Commit new grades and ratings
         shell: bash
         run: |
-          if [ -z "$(git status --porcelain data/tracking/game_grades.csv game_grades.csv)" ]; then
-            echo "No newly completed games"
+          if [ -z "$(git status --porcelain data/tracking/game_grades.csv game_grades.csv data/model/team_ratings_${TARGET_SEASON}.csv)" ]; then
+            echo "No newly completed games or rating changes"
             exit 0
           fi
           git config user.name "core-v2-automation"
           git config user.email "core-v2-automation@users.noreply.github.com"
-          git add data/tracking/game_grades.csv game_grades.csv
-          git commit -m "data: grade completed Core V2 games"
+          git add data/tracking/game_grades.csv game_grades.csv "data/model/team_ratings_${TARGET_SEASON}.csv"
+          git commit -m "data: grade games and update Core V2 ratings"
           git push
