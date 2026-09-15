@@ -1,3 +1,9 @@
 season,week,team,adjustment_points,category,player,reason,exclude_from_auto
 2026,2,NE,-0.35,INJURY,A.J. Brown,High-ankle sprain; active while unavailable,True
 2026,2,SEA,-1.50,QB,Sam Darnold,Drew Lock expected to start Week 2,False
+2026,2,ATL,-0.75,QB,Cooper Rush,Expected Week 2 starter with Tua Tagovailoa and Michael Penix Jr. unavailable,False
+2026,2,ATL,-0.39,INJURY,Da'Shawn Hand,Season-ending quadriceps injury announced after the initial Week 2 report snapshot,False
+2026,2,LA,-0.56,INJURY,Myles Garrett,Knee surgery and injured reserve; unavailable for Week 2,False
+2026,2,PHI,-0.57,INJURY,Landon Dickerson,Placed on injured reserve; unavailable for Week 2,False
+2026,2,NYJ,-0.54,INJURY,Minkah Fitzpatrick,Expected to miss multiple games with a groin injury,False
+2026,2,NYJ,-0.32,INJURY,Omar Cooper Jr.,Expected to miss multiple games; Week 2 unavailable,False
