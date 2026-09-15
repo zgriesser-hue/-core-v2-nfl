@@ -33,6 +33,7 @@ def locate_file(filename):
     for candidate in [
         ROOT / filename,
         ROOT / "data" / filename,
+        ROOT / "data" / "model" / filename,
     ]:
         if candidate.exists():
             return candidate
@@ -167,6 +168,10 @@ openers_path = locate_file("current_openers.csv") or locate_file(
 
 grades_path = locate_file("game_grades.csv")
 
+ratings_path = locate_file(
+    "team_ratings_2026.csv"
+)
+
 missing = []
 
 if board_path is None:
@@ -180,6 +185,9 @@ if validation_path is None:
 
 if openers_path is None:
     missing.append("week_01_openers.csv")
+
+if ratings_path is None:
+    missing.append("team_ratings_2026.csv")
 
 if missing:
     st.error(
@@ -209,6 +217,8 @@ game_grades = (
     if grades_path is not None
     else pd.DataFrame()
 )
+
+power_ratings = load_csv(str(ratings_path))
 
 active_season = int(base_board["season"].iloc[0]) if "season" in base_board else 2026
 active_week = int(base_board["week"].iloc[0])
@@ -721,7 +731,7 @@ st.sidebar.write(
     f"Production version: **Core V2 {active_season} Week {active_week}**"
 )
 st.sidebar.write(
-    "PVAR personnel layer: **Active**"
+    "PVAR personnel layer: **Shadow validation**"
 )
 st.sidebar.write(
     "Market used inside model: **No**"
@@ -1403,15 +1413,72 @@ with tab4:
 with tab5:
     st.subheader("Power Ratings")
 
-    st.info(
-        "The in-season power-rating table will "
-        "connect here after the first ratings update."
-    )
+    ratings_display = power_ratings.copy()
+    numeric_columns = [
+        "rank",
+        "current_team_rating",
+        "rating_before_performance",
+        "performance_adjustment",
+        "qb_adjustment",
+        "manual_personnel_adjustment",
+        "manual_injury_adjustment",
+        "games_in_performance_update",
+        "performance_update_through_week",
+    ]
+    for column in numeric_columns:
+        if column in ratings_display.columns:
+            ratings_display[column] = pd.to_numeric(
+                ratings_display[column], errors="coerce"
+            )
 
-    st.write(
-        "Current fair lines include team ratings, "
-        "quarterbacks, home-field advantage, and "
-        "the active PVAR personnel layer."
+    update_week = int(
+        ratings_display.get(
+            "performance_update_through_week",
+            pd.Series([0]),
+        ).max()
+    )
+    top_team = ratings_display.sort_values(
+        "current_team_rating", ascending=False
+    ).iloc[0]
+    performance_change = ratings_display.get(
+        "performance_adjustment",
+        pd.Series(0.0, index=ratings_display.index),
+    ).fillna(0.0)
+
+    pr1, pr2, pr3, pr4 = st.columns(4)
+    pr1.metric("No. 1 Team", top_team["team"])
+    pr2.metric("Top Rating", f'{top_team["current_team_rating"]:+.2f}')
+    pr3.metric("Updated Through", f"Week {update_week}" if update_week else "Preseason")
+    pr4.metric("Largest Weekly Move", f'{performance_change.abs().max():.2f} pts')
+
+    table = pd.DataFrame({
+        "Rank": ratings_display["rank"].astype("Int64"),
+        "Team": ratings_display.get("team_name", ratings_display["team"]),
+        "Rating": ratings_display["current_team_rating"].round(2),
+        "Performance Δ": performance_change.round(2),
+        "Before performance": ratings_display.get(
+            "rating_before_performance",
+            ratings_display["current_team_rating"],
+        ).round(2),
+        "QB Δ": ratings_display.get(
+            "qb_adjustment", pd.Series(0.0, index=ratings_display.index)
+        ).round(2),
+        "Manual personnel Δ": ratings_display.get(
+            "manual_personnel_adjustment",
+            pd.Series(0.0, index=ratings_display.index),
+        ).round(2),
+        "Manual injury Δ": ratings_display.get(
+            "manual_injury_adjustment",
+            pd.Series(0.0, index=ratings_display.index),
+        ).round(2),
+    }).sort_values(["Rank", "Team"])
+
+    st.dataframe(table, use_container_width=True, hide_index=True)
+    st.caption(
+        "Performance updates are zero-sum and opponent-adjusted: each team's "
+        "final-margin residual versus the released Core V2 projection is "
+        "weighted 10%, split between the teams, and capped at 0.75 points per "
+        "team per game. Game-specific PVAR remains in shadow validation."
     )
 
 with tab6:
