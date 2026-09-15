@@ -2,8 +2,8 @@ name: Validate and publish weekly projections
 
 on:
   schedule:
-    # Runs after Monday grading updates the prior week's power ratings.
-    - cron: "0 14 * * 1"
+    # Tuesday follows the grading run and includes Monday Night Football.
+    - cron: "0 14 * * 2"
   workflow_dispatch:
     inputs:
       season:
