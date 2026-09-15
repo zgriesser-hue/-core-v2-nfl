@@ -1424,6 +1424,9 @@ with tab5:
         "manual_injury_adjustment",
         "games_in_performance_update",
         "performance_update_through_week",
+        "performance_complete_through_week",
+        "latest_week_games_graded",
+        "latest_week_games_scheduled",
     ]
     for column in numeric_columns:
         if column in ratings_display.columns:
@@ -1437,6 +1440,21 @@ with tab5:
             pd.Series([0]),
         ).max()
     )
+    update_status = str(
+        ratings_display.get(
+            "performance_update_status",
+            pd.Series(["PRESEASON"]),
+        ).iloc[0]
+    )
+    games_graded = int(
+        ratings_display.get("latest_week_games_graded", pd.Series([0])).max()
+    )
+    games_scheduled = int(
+        ratings_display.get("latest_week_games_scheduled", pd.Series([0])).max()
+    )
+    update_label = f"Week {update_week}" if update_week else "Preseason"
+    if update_status == "PARTIAL":
+        update_label += f" partial ({games_graded}/{games_scheduled})"
     top_team = ratings_display.sort_values(
         "current_team_rating", ascending=False
     ).iloc[0]
@@ -1448,7 +1466,7 @@ with tab5:
     pr1, pr2, pr3, pr4 = st.columns(4)
     pr1.metric("No. 1 Team", top_team["team"])
     pr2.metric("Top Rating", f'{top_team["current_team_rating"]:+.2f}')
-    pr3.metric("Updated Through", f"Week {update_week}" if update_week else "Preseason")
+    pr3.metric("Updated Through", update_label)
     pr4.metric("Largest Weekly Move", f'{performance_change.abs().max():.2f} pts')
 
     table = pd.DataFrame({
@@ -1480,6 +1498,11 @@ with tab5:
         "weighted 10%, split between the teams, and capped at 0.75 points per "
         "team per game. Game-specific PVAR remains in shadow validation."
     )
+    if update_status == "PARTIAL":
+        st.info(
+            "Monday ratings are provisional and include completed Sunday games. "
+            "They will be recomputed Tuesday after Monday Night Football."
+        )
 
 with tab6:
     st.subheader("Historical Validation")

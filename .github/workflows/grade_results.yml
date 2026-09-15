@@ -43,7 +43,8 @@ jobs:
             --season "$TARGET_SEASON" \
             --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
             --grades data/tracking/game_grades.csv \
-            --ratings "data/model/team_ratings_${TARGET_SEASON}.csv"
+            --ratings "data/model/team_ratings_${TARGET_SEASON}.csv" \
+            --include-partial-latest-week
       - name: Commit new grades and ratings
         shell: bash
         run: |
