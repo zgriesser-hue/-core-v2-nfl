@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from scripts.backtest_rating_unit_split import add_unit_features, normalize_team
 
@@ -43,5 +44,5 @@ def test_unit_features_are_pregame_and_week_safe():
 
     assert featured.loc["one", "offense_difference"] == 0.0
     assert featured.loc["two", "offense_difference"] == 0.0
-    assert featured.loc["three", "offense_difference"] == 0.30
-    assert featured.loc["three", "defense_difference"] == 0.30
+    assert featured.loc["three", "offense_difference"] == pytest.approx(0.30)
+    assert featured.loc["three", "defense_difference"] == pytest.approx(0.30)
