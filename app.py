@@ -1578,12 +1578,15 @@ with tab6:
         for column in [
             "projection_abs_error",
             "clv_points",
+            "bet_clv_points",
+            "projection_vs_close_points",
             "release_bet_spread",
             "closing_bet_spread",
             "away_score",
             "home_score",
         ]:
-            live[column] = pd.to_numeric(live[column], errors="coerce")
+            if column in live.columns:
+                live[column] = pd.to_numeric(live[column], errors="coerce")
 
         graded_picks = live.loc[
             live["ats_result_at_release"].isin(["Win", "Loss", "Push"])
@@ -1603,10 +1606,13 @@ with tab6:
             f"{100 * cover_rate:.1f}%" if pd.notna(cover_rate) else "—",
         )
         l4.metric(
-            "Average CLV",
+            "Avg Projection vs Close",
             (
-                f'{graded_picks["clv_points"].mean():+.2f} pts'
-                if graded_picks["clv_points"].notna().any()
+                f'{graded_picks["projection_vs_close_points"].mean():+.2f} pts'
+                if (
+                    "projection_vs_close_points" in graded_picks
+                    and graded_picks["projection_vs_close_points"].notna().any()
+                )
                 else "—"
             ),
         )
@@ -1641,7 +1647,16 @@ with tab6:
                     if "closing_status" in live.columns
                     else "—"
                 ),
-                "CLV": live["clv_points"].map(
+                "Projection vs close": live.get(
+                    "projection_vs_close_points",
+                    pd.Series(float("nan"), index=live.index),
+                ).map(
+                    lambda value: f"{value:+.1f}" if pd.notna(value) else "—"
+                ),
+                "Bet CLV": live.get(
+                    "bet_clv_points",
+                    live["clv_points"],
+                ).map(
                     lambda value: f"{value:+.1f}" if pd.notna(value) else "—"
                 ),
                 "ATS": live["ats_result_at_release"],
@@ -1656,7 +1671,9 @@ with tab6:
             hide_index=True,
         )
         st.caption(
-            "CLV compares the market consensus at the published model release "
-            "with the automated pre-kickoff consensus. Positive is favorable. "
+            "Projection vs close compares the released Core V2 fair line with "
+            "the automated pre-kickoff consensus in the model side's direction. "
+            "Bet CLV separately compares the available release bet line with the close. "
+            "Positive is favorable for either metric. "
             "A missed close is left blank and is never reconstructed from an earlier quote."
         )
