@@ -47,3 +47,21 @@ def test_latest_week_requires_every_scheduled_game():
         {"season": 2026, "game_key": "two-a"},
     ])
     assert latest_fully_graded_week(schedule, grade_rows, 2026) == 1
+
+
+def test_partial_recompute_does_not_double_count_games():
+    partial = update_team_ratings(ratings(), grades(), 2026, 1)
+    full_grades = pd.concat([
+        grades(),
+        pd.DataFrame([{
+            "season": 2026, "week": 2, "game_key": "2026_W2_HME_AWY",
+            "away_team": "HME", "home_team": "AWY",
+            "actual_home_margin": 1.0, "projected_home_margin": -1.0,
+        }]),
+    ], ignore_index=True)
+    recomputed = update_team_ratings(partial, full_grades, 2026, 2)
+    direct = update_team_ratings(ratings(), full_grades, 2026, 2)
+    pd.testing.assert_series_equal(
+        recomputed.set_index("team")["current_team_rating"],
+        direct.set_index("team")["current_team_rating"],
+    )
