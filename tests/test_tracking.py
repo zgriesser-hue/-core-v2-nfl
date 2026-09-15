@@ -114,6 +114,9 @@ def test_grading_uses_last_release_before_close_and_calculates_clv():
     assert grades.loc[0, "model_selected_team"] == "PHI"
     assert grades.loc[0, "ats_result_at_release"] == "Win"
     assert grades.loc[0, "clv_points"] == 1.0
+    assert grades.loc[0, "bet_clv_points"] == 1.0
+    assert grades.loc[0, "projection_vs_close_points"] == 1.5
+    assert grades.loc[0, "model_edge_at_close"] == 1.5
     assert grades.loc[0, "projection_abs_error"] == 2.0
 
 
@@ -148,6 +151,7 @@ def test_pass_is_not_graded_as_an_away_pick():
     assert grades.loc[0, "model_selected_side"] == "PASS"
     assert grades.loc[0, "ats_result_at_release"] == "Pass"
     assert pd.isna(grades.loc[0, "clv_points"])
+    assert pd.isna(grades.loc[0, "projection_vs_close_points"])
 
 
 def test_final_score_is_graded_when_close_was_not_captured():
