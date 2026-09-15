@@ -275,9 +275,27 @@ def grade_completed_games(
         ["Pass", "Win", "Loss"],
         default="Push",
     )
-    merged["clv_points"] = merged["release_bet_spread"] - merged["closing_bet_spread"]
+    merged["bet_clv_points"] = (
+        merged["release_bet_spread"] - merged["closing_bet_spread"]
+    )
+    # Positive means the released Core V2 projection remained beyond the
+    # closing market in the direction of the model's selected side. Negative
+    # means the closing market crossed past the model projection.
+    merged["projection_vs_close_points"] = np.select(
+        [is_home, is_away],
+        [
+            merged["closing_home_spread"] - merged["fair_home_spread"],
+            merged["fair_home_spread"] - merged["closing_home_spread"],
+        ],
+        default=np.nan,
+    )
+    # Retain the legacy field as traditional bet CLV for downstream users.
+    merged["clv_points"] = merged["bet_clv_points"]
     merged["model_edge_at_close"] = (
         merged["fair_home_spread"] - merged["closing_home_spread"]
+    ).abs()
+    merged["closing_market_abs_error"] = (
+        merged["actual_home_margin"] + merged["closing_home_spread"]
     ).abs()
     merged["closing_status"] = np.where(
         merged["_closing_ts"].notna(),
@@ -287,6 +305,39 @@ def grade_completed_games(
     merged["graded_timestamp_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     merged = merged.drop(columns=["_release_ts", "_closing_ts"], errors="ignore")
     combined = pd.concat([existing_grades, merged], ignore_index=True)
+    # Backfill the corrected model-versus-close fields for existing grades.
+    for column in [
+        "fair_home_spread",
+        "closing_home_spread",
+        "release_bet_spread",
+        "actual_home_margin",
+    ]:
+        combined[column] = pd.to_numeric(combined[column], errors="coerce")
+    combined_home = combined["model_selected_side"].eq("HOME")
+    combined_away = combined["model_selected_side"].eq("AWAY")
+    combined["closing_bet_spread"] = np.select(
+        [combined_home, combined_away],
+        [combined["closing_home_spread"], -combined["closing_home_spread"]],
+        default=np.nan,
+    )
+    combined["bet_clv_points"] = (
+        combined["release_bet_spread"] - combined["closing_bet_spread"]
+    )
+    combined["clv_points"] = combined["bet_clv_points"]
+    combined["projection_vs_close_points"] = np.select(
+        [combined_home, combined_away],
+        [
+            combined["closing_home_spread"] - combined["fair_home_spread"],
+            combined["fair_home_spread"] - combined["closing_home_spread"],
+        ],
+        default=np.nan,
+    )
+    combined["model_edge_at_close"] = (
+        combined["fair_home_spread"] - combined["closing_home_spread"]
+    ).abs()
+    combined["closing_market_abs_error"] = (
+        combined["actual_home_margin"] + combined["closing_home_spread"]
+    ).abs()
     if combined.duplicated("game_key").any():
         raise RuntimeError("Game-grade history contains duplicate games")
     return combined.sort_values(["season", "week", "game_key"]).reset_index(drop=True)
