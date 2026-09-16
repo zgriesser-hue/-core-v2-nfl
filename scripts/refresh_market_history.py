@@ -75,6 +75,34 @@ def append_projection_snapshots(
     ).reset_index(drop=True)
 
 
+def preserve_existing_consensus_openers(
+    existing: pd.DataFrame,
+    captured: pd.DataFrame,
+) -> pd.DataFrame:
+    """Add first-observed totals without rewriting an existing spread opener."""
+    if existing.empty:
+        return captured.copy()
+    output = existing.copy()
+    for column in ("consensus_open_total", "consensus_open_total_books"):
+        if column not in output:
+            output[column] = pd.NA
+    captured_lookup = captured.set_index("game_key")
+    for index, row in output.iterrows():
+        key = row["game_key"]
+        if key not in captured_lookup.index:
+            continue
+        candidate = captured_lookup.loc[key]
+        if isinstance(candidate, pd.DataFrame):
+            candidate = candidate.iloc[0]
+        for column in ("consensus_open_total", "consensus_open_total_books"):
+            if pd.isna(output.loc[index, column]) and pd.notna(candidate.get(column)):
+                output.loc[index, column] = candidate[column]
+    missing = captured.loc[~captured["game_key"].isin(set(output["game_key"]))]
+    return pd.concat([output, missing], ignore_index=True).sort_values(
+        "game_key"
+    ).reset_index(drop=True)
+
+
 def latest_remaining_credits(usage: pd.DataFrame) -> float | None:
     if usage.empty or "requests_remaining" not in usage:
         return None
@@ -176,7 +204,13 @@ def main() -> None:
     book_openers = append_first_seen_openers(
         read_csv(book_openers_path), quotes, kickoff_by_game
     )
-    dashboard_openers = build_consensus_openers(book_openers)
+    captured_openers = build_consensus_openers(book_openers)
+    existing_dashboard_openers = read_csv(dashboard_openers_path)
+    if existing_dashboard_openers.empty:
+        existing_dashboard_openers = read_csv(args.current_openers)
+    dashboard_openers = preserve_existing_consensus_openers(
+        existing_dashboard_openers, captured_openers
+    )
 
     consensus_snapshot = consensus.copy()
     consensus_snapshot["market_snapshot_timestamp_et"] = snapshot_timestamp
