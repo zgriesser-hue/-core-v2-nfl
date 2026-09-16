@@ -19,7 +19,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: core-v2-projection-publish
+  group: core-v2-repository-data-write
   cancel-in-progress: false
 
 jobs:
