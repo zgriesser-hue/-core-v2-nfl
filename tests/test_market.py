@@ -1,8 +1,12 @@
 import pandas as pd
 
 from core_v2.market import (
+    append_market_history,
     append_first_seen_openers,
+    build_market_consensus,
     build_consensus_openers,
+    latest_market_snapshot,
+    parse_market_payload,
     parse_spread_payload,
 )
 from parlay_live import select_pregame_game_keys
@@ -25,7 +29,14 @@ def payload(line=-3.5, topped_up="False"):
                                 {"name": "Washington Commanders", "point": -line, "price": 1.91},
                                 {"name": "Philadelphia Eagles", "point": line, "price": 1.91},
                             ],
-                        }
+                        },
+                        {
+                            "key": "totals",
+                            "outcomes": [
+                                {"name": "Over", "point": 47.5, "price": 1.91},
+                                {"name": "Under", "point": 47.5, "price": 1.91},
+                            ],
+                        },
                     ],
                 }
             ],
@@ -63,6 +74,55 @@ def test_consensus_uses_configured_core_books():
     result = build_consensus_openers(pd.DataFrame(rows))
     assert result.loc[0, "consensus_open_home_spread"] == -4.0
     assert result.loc[0, "consensus_open_books"] == 3
+
+
+def test_market_parser_and_history_capture_totals_idempotently():
+    allowed = {"2026_W1_WAS_PHI"}
+    first = parse_market_payload(
+        payload(-3.5), 2026, 1, allowed, "2026-09-01T12:00:00Z"
+    )
+    assert first.loc[0, "total_points"] == 47.5
+    assert first.loc[0, "over_price_american"] == -110
+
+    history = append_market_history(pd.DataFrame(), first)
+    history = append_market_history(history, first)
+    assert len(history) == 1
+
+    later = parse_market_payload(
+        payload(-4.5), 2026, 1, allowed, "2026-09-01T18:00:00Z"
+    )
+    history = append_market_history(history, later)
+    assert len(history) == 2
+    latest = latest_market_snapshot(history)
+    assert latest.loc[0, "home_spread"] == -4.5
+
+
+def test_current_consensus_contains_spread_and_total():
+    rows = []
+    for book, line, total in [
+        ("draftkings", -3.5, 47.5),
+        ("fanduel", -4.5, 48.5),
+        ("bet365", -4.0, 48.0),
+        ("betmgm", -9.5, 60.0),
+    ]:
+        rows.append(
+            {
+                "season": 2026,
+                "week": 1,
+                "game_key": "2026_W1_WAS_PHI",
+                "away_team": "WAS",
+                "home_team": "PHI",
+                "sportsbook": book,
+                "home_spread": line,
+                "total_points": total,
+                "market_snapshot_timestamp_et": "2026-09-01T12:00:00Z",
+            }
+        )
+    result = build_market_consensus(pd.DataFrame(rows))
+    assert result.loc[0, "market_home_spread"] == -4.0
+    assert result.loc[0, "market_total"] == 48.0
+    assert result.loc[0, "spread_books"] == 3
+    assert result.loc[0, "total_books"] == 3
 
 
 def test_live_refresh_excludes_started_and_graded_games():

@@ -121,6 +121,29 @@ def parse_spread_payload(
     snapshot_timestamp: str | None = None,
 ) -> pd.DataFrame:
     """Parse one two-sided spread quote per game/book from a provider response."""
+    quotes = parse_market_payload(
+        payload,
+        season,
+        week,
+        allowed_game_keys,
+        snapshot_timestamp,
+    )
+    quotes = quotes.loc[
+        quotes[["away_spread", "home_spread"]].notna().all(axis=1)
+    ].copy()
+    if quotes.empty:
+        raise RuntimeError("No valid spreads matched the target schedule")
+    return quotes.sort_values(["game_key", "sportsbook"]).reset_index(drop=True)
+
+
+def parse_market_payload(
+    payload: object,
+    season: int,
+    week: int,
+    allowed_game_keys: set[str],
+    snapshot_timestamp: str | None = None,
+) -> pd.DataFrame:
+    """Parse spread and total quotes into one nullable row per game/book."""
     snapshot_timestamp = snapshot_timestamp or datetime.now(
         ZoneInfo("America/New_York")
     ).isoformat(timespec="seconds")
@@ -141,57 +164,127 @@ def parse_spread_payload(
                 continue
             book_update = book.get("last_update") or book.get("lastUpdate")
 
+            row = {
+                "season": int(season),
+                "week": int(week),
+                "game_key": key,
+                "away_team": away,
+                "home_team": home,
+                "sportsbook": sportsbook,
+                "market_snapshot_timestamp_et": snapshot_timestamp,
+                "observed_timestamp_et": book_update,
+                "spread_observed_timestamp_et": None,
+                "total_observed_timestamp_et": None,
+                "away_spread": np.nan,
+                "away_price_american": np.nan,
+                "home_spread": np.nan,
+                "home_price_american": np.nan,
+                "total_points": np.nan,
+                "over_price_american": np.nan,
+                "under_price_american": np.nan,
+                "book_topped_up_clean": clean_bool(book.get("topped_up")),
+            }
+
             for market in book.get("markets") or []:
                 market_name = market.get("key") or market.get("market")
-                if str(market_name).strip().lower() not in {"spread", "spreads"}:
-                    continue
+                market_name = str(market_name).strip().lower()
                 outcomes = market.get("outcomes") or []
-                by_team = {
-                    normalize_market_team(outcome.get("name") or outcome.get("team")): outcome
-                    for outcome in outcomes
-                }
-                away_outcome = by_team.get(away)
-                home_outcome = by_team.get(home)
-                if away_outcome is None or home_outcome is None:
-                    continue
-
-                away_spread = pd.to_numeric(away_outcome.get("point"), errors="coerce")
-                home_spread = pd.to_numeric(home_outcome.get("point"), errors="coerce")
-                away_decimal = pd.to_numeric(away_outcome.get("price"), errors="coerce")
-                home_decimal = pd.to_numeric(home_outcome.get("price"), errors="coerce")
-                if any(
-                    pd.isna(value)
-                    for value in (away_spread, home_spread, away_decimal, home_decimal)
-                ):
-                    continue
-                if abs(float(away_spread) + float(home_spread)) > 0.001:
-                    raise RuntimeError(f"Non-opposite spread pair for {key} at {sportsbook}")
-
-                rows.append(
-                    {
-                        "season": int(season),
-                        "week": int(week),
-                        "game_key": key,
-                        "away_team": away,
-                        "home_team": home,
-                        "sportsbook": sportsbook,
-                        "market_snapshot_timestamp_et": snapshot_timestamp,
-                        "observed_timestamp_et": (
-                            market.get("last_update")
-                            or market.get("lastUpdate")
-                            or book_update
-                        ),
-                        "away_spread": float(away_spread),
-                        "away_price_american": decimal_to_american(away_decimal),
-                        "home_spread": float(home_spread),
-                        "home_price_american": decimal_to_american(home_decimal),
-                        "book_topped_up_clean": clean_bool(book.get("topped_up")),
-                    }
+                observed = (
+                    market.get("last_update")
+                    or market.get("lastUpdate")
+                    or book_update
                 )
+
+                if market_name in {"spread", "spreads"}:
+                    by_team = {
+                        normalize_market_team(
+                            outcome.get("name") or outcome.get("team")
+                        ): outcome
+                        for outcome in outcomes
+                    }
+                    away_outcome = by_team.get(away)
+                    home_outcome = by_team.get(home)
+                    if away_outcome is None or home_outcome is None:
+                        continue
+                    away_spread = pd.to_numeric(
+                        away_outcome.get("point"), errors="coerce"
+                    )
+                    home_spread = pd.to_numeric(
+                        home_outcome.get("point"), errors="coerce"
+                    )
+                    away_decimal = pd.to_numeric(
+                        away_outcome.get("price"), errors="coerce"
+                    )
+                    home_decimal = pd.to_numeric(
+                        home_outcome.get("price"), errors="coerce"
+                    )
+                    if any(
+                        pd.isna(value)
+                        for value in (
+                            away_spread,
+                            home_spread,
+                            away_decimal,
+                            home_decimal,
+                        )
+                    ):
+                        continue
+                    if abs(float(away_spread) + float(home_spread)) > 0.001:
+                        raise RuntimeError(
+                            f"Non-opposite spread pair for {key} at {sportsbook}"
+                        )
+                    row.update(
+                        {
+                            "observed_timestamp_et": observed,
+                            "spread_observed_timestamp_et": observed,
+                            "away_spread": float(away_spread),
+                            "away_price_american": decimal_to_american(away_decimal),
+                            "home_spread": float(home_spread),
+                            "home_price_american": decimal_to_american(home_decimal),
+                        }
+                    )
+
+                elif market_name in {"total", "totals"}:
+                    by_side = {
+                        str(outcome.get("name", "")).strip().lower(): outcome
+                        for outcome in outcomes
+                    }
+                    over = by_side.get("over")
+                    under = by_side.get("under")
+                    if over is None or under is None:
+                        continue
+                    over_point = pd.to_numeric(over.get("point"), errors="coerce")
+                    under_point = pd.to_numeric(under.get("point"), errors="coerce")
+                    over_decimal = pd.to_numeric(over.get("price"), errors="coerce")
+                    under_decimal = pd.to_numeric(under.get("price"), errors="coerce")
+                    if any(
+                        pd.isna(value)
+                        for value in (
+                            over_point,
+                            under_point,
+                            over_decimal,
+                            under_decimal,
+                        )
+                    ):
+                        continue
+                    if abs(float(over_point) - float(under_point)) > 0.001:
+                        raise RuntimeError(
+                            f"Non-matching total pair for {key} at {sportsbook}"
+                        )
+                    row.update(
+                        {
+                            "total_observed_timestamp_et": observed,
+                            "total_points": float(over_point),
+                            "over_price_american": decimal_to_american(over_decimal),
+                            "under_price_american": decimal_to_american(under_decimal),
+                        }
+                    )
+
+            if pd.notna(row["away_spread"]) or pd.notna(row["total_points"]):
+                rows.append(row)
 
     quotes = pd.DataFrame(rows)
     if quotes.empty:
-        raise RuntimeError("No valid spreads matched the target schedule")
+        raise RuntimeError("No valid spreads or totals matched the target schedule")
     duplicates = quotes.duplicated(["game_key", "sportsbook"], keep=False)
     if duplicates.any():
         bad = quotes.loc[duplicates, ["game_key", "sportsbook"]]
@@ -200,10 +293,18 @@ def parse_spread_payload(
 
 
 def request_spreads(api_key: str, timeout: int = 30) -> tuple[object, dict]:
+    return request_markets(api_key, markets=("spreads",), timeout=timeout)
+
+
+def request_markets(
+    api_key: str,
+    markets: tuple[str, ...] = ("spreads", "totals"),
+    timeout: int = 30,
+) -> tuple[object, dict]:
     response = requests.get(
         API_URL,
         headers={"X-API-Key": api_key.strip()},
-        params={"regions": "us", "markets": "spreads"},
+        params={"regions": "us", "markets": ",".join(markets)},
         timeout=timeout,
     )
     response.raise_for_status()
@@ -214,22 +315,73 @@ def request_spreads(api_key: str, timeout: int = 30) -> tuple[object, dict]:
     return response.json(), metadata
 
 
+def append_market_history(existing: pd.DataFrame, quotes: pd.DataFrame) -> pd.DataFrame:
+    """Append snapshots without mutating prior observations; repeated runs are idempotent."""
+    keys = ["market_snapshot_timestamp_et", "game_key", "sportsbook"]
+    combined = pd.concat([existing.copy(), quotes.copy()], ignore_index=True)
+    if combined.empty:
+        return combined
+    combined = combined.drop_duplicates(keys, keep="first")
+    return combined.sort_values(keys).reset_index(drop=True)
+
+
+def latest_market_snapshot(history: pd.DataFrame) -> pd.DataFrame:
+    """Return the newest quote for each game/book from append-only history."""
+    if history.empty:
+        return history.copy()
+    latest = history.copy()
+    latest["_snapshot"] = pd.to_datetime(
+        latest["market_snapshot_timestamp_et"], errors="coerce", utc=True
+    )
+    latest = latest.sort_values("_snapshot").drop_duplicates(
+        ["game_key", "sportsbook"], keep="last"
+    )
+    return latest.drop(columns="_snapshot").sort_values(
+        ["game_key", "sportsbook"]
+    ).reset_index(drop=True)
+
+
+def build_market_consensus(quotes: pd.DataFrame) -> pd.DataFrame:
+    """Build current spread and total medians from configured core books."""
+    core = quotes.loc[quotes["sportsbook"].isin(CORE_CONSENSUS_BOOKS)].copy()
+    group = ["season", "week", "game_key", "away_team", "home_team"]
+    consensus = core.groupby(group, as_index=False).agg(
+        market_home_spread=("home_spread", "median"),
+        market_total=("total_points", "median"),
+        spread_books=("home_spread", "count"),
+        total_books=("total_points", "count"),
+        market_snapshot_timestamp_et=("market_snapshot_timestamp_et", "max"),
+    )
+    consensus["consensus_method"] = "MEDIAN_LATEST_CORE_BOOKS"
+    return consensus
+
+
 def append_first_seen_openers(
     existing: pd.DataFrame,
     quotes: pd.DataFrame,
     kickoff_by_game: dict[str, object] | None = None,
 ) -> pd.DataFrame:
-    """Append only previously unseen game/book pairs; existing openers are immutable."""
+    """Capture immutable first-seen spread and total values for each game/book."""
     kickoff_by_game = kickoff_by_game or {}
     existing = existing.copy()
     if not existing.empty:
         existing["book"] = existing["book"].map(normalize_book)
-    new = quotes.loc[~quotes["sportsbook"].isin(EXCLUDED_BOOKS)].copy()
-    if not existing.empty:
-        known = set(zip(existing["game_key"], existing["book"]))
-        new = new.loc[
-            ~new.apply(lambda row: (row["game_key"], row["sportsbook"]) in known, axis=1)
-        ]
+    for column in (
+        "opening_total",
+        "opening_over_price",
+        "opening_under_price",
+        "total_opening_seen_utc",
+    ):
+        if column not in existing.columns:
+            existing[column] = np.nan
+
+    eligible = quotes.loc[~quotes["sportsbook"].isin(EXCLUDED_BOOKS)].copy()
+    known = set(zip(existing.get("game_key", []), existing.get("book", [])))
+    new = eligible.loc[
+        ~eligible.apply(
+            lambda row: (row["game_key"], row["sportsbook"]) in known, axis=1
+        )
+    ]
     captured = pd.DataFrame(
         {
             "season": new["season"],
@@ -242,11 +394,35 @@ def append_first_seen_openers(
             "opening_home_spread": new["home_spread"],
             "opening_home_price": new["home_price_american"],
             "opening_seen_utc": new["market_snapshot_timestamp_et"],
+            "opening_total": new["total_points"],
+            "opening_over_price": new["over_price_american"],
+            "opening_under_price": new["under_price_american"],
+            "total_opening_seen_utc": new["market_snapshot_timestamp_et"],
             "source": "PARLAYAPI_FIRST_OBSERVED",
             "market_stage": "OPEN",
         }
     )
     combined = pd.concat([existing, captured], ignore_index=True)
+
+    # A sportsbook can publish its spread before its total. Fill only a still-missing
+    # total opener from the first later snapshot and never revise a captured value.
+    if not combined.empty and not eligible.empty:
+        quote_lookup = eligible.set_index(["game_key", "sportsbook"])
+        for index, row in combined.loc[combined["opening_total"].isna()].iterrows():
+            key = (row["game_key"], row["book"])
+            if key not in quote_lookup.index:
+                continue
+            quote = quote_lookup.loc[key]
+            if isinstance(quote, pd.DataFrame):
+                quote = quote.iloc[0]
+            if pd.isna(quote.get("total_points")):
+                continue
+            combined.loc[index, "opening_total"] = quote["total_points"]
+            combined.loc[index, "opening_over_price"] = quote["over_price_american"]
+            combined.loc[index, "opening_under_price"] = quote["under_price_american"]
+            combined.loc[index, "total_opening_seen_utc"] = quote[
+                "market_snapshot_timestamp_et"
+            ]
     if combined.duplicated(["game_key", "book"]).any():
         raise RuntimeError("Opener history contains duplicate game/book pairs")
     return combined.sort_values(["game_key", "book"]).reset_index(drop=True)
@@ -254,6 +430,8 @@ def append_first_seen_openers(
 
 def build_consensus_openers(openers: pd.DataFrame) -> pd.DataFrame:
     core = openers.loc[openers["book"].isin(CORE_CONSENSUS_BOOKS)].copy()
+    if "opening_total" not in core.columns:
+        core["opening_total"] = np.nan
     consensus = (
         core.groupby(
             ["season", "week", "game_key", "away_team", "home_team"], as_index=False
@@ -261,6 +439,8 @@ def build_consensus_openers(openers: pd.DataFrame) -> pd.DataFrame:
         .agg(
             consensus_open_home_spread=("opening_home_spread", "median"),
             consensus_open_books=("book", "nunique"),
+            consensus_open_total=("opening_total", "median"),
+            consensus_open_total_books=("opening_total", "count"),
             earliest_core_open_seen_utc=("opening_seen_utc", "min"),
             latest_core_open_seen_utc=("opening_seen_utc", "max"),
         )
