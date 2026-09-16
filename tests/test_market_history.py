@@ -3,6 +3,7 @@ import pandas as pd
 from scripts.refresh_market_history import (
     append_projection_snapshots,
     latest_remaining_credits,
+    preserve_existing_consensus_openers,
 )
 
 
@@ -44,3 +45,31 @@ def test_projection_snapshots_are_timestamped_and_idempotent():
 def test_latest_remaining_credits_ignores_unparseable_values():
     usage = pd.DataFrame({"requests_remaining": ["900", "unknown", "842"]})
     assert latest_remaining_credits(usage) == 842
+
+
+def test_first_total_does_not_rewrite_existing_spread_opener():
+    existing = pd.DataFrame(
+        [
+            {
+                "game_key": "2026_W2_IND_KC",
+                "away_team": "IND",
+                "home_team": "KC",
+                "consensus_open_home_spread": -2.5,
+            }
+        ]
+    )
+    captured = pd.DataFrame(
+        [
+            {
+                "game_key": "2026_W2_IND_KC",
+                "away_team": "IND",
+                "home_team": "KC",
+                "consensus_open_home_spread": -4.0,
+                "consensus_open_total": 47.5,
+                "consensus_open_total_books": 4,
+            }
+        ]
+    )
+    result = preserve_existing_consensus_openers(existing, captured)
+    assert result.loc[0, "consensus_open_home_spread"] == -2.5
+    assert result.loc[0, "consensus_open_total"] == 47.5
