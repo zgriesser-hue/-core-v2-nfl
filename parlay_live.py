@@ -227,6 +227,9 @@ def normalize_existing_lines(lines):
         "away_price_american",
         "home_spread",
         "home_price_american",
+        "total_points",
+        "over_price_american",
+        "under_price_american",
         "quote_age_minutes",
     ]:
         if column in lines.columns:
@@ -273,7 +276,7 @@ def fetch_live_lines(api_key, season, week, active_game_keys):
         headers={"X-API-Key": api_key.strip()},
         params={
             "regions": "us",
-            "markets": "spreads",
+            "markets": "spreads,totals",
         },
         timeout=30,
     )
@@ -342,6 +345,39 @@ def fetch_live_lines(api_key, season, week, active_game_keys):
                 book.get("last_update")
                 or book.get("lastUpdate")
             )
+
+            total_points = np.nan
+            over_price = np.nan
+            under_price = np.nan
+            total_observed_timestamp = None
+            for candidate in book.get("markets") or []:
+                candidate_key = str(
+                    candidate.get("key") or candidate.get("market")
+                ).strip().lower()
+                if candidate_key not in {"total", "totals"}:
+                    continue
+                by_side = {
+                    str(outcome.get("name", "")).strip().lower(): outcome
+                    for outcome in candidate.get("outcomes") or []
+                }
+                over = by_side.get("over")
+                under = by_side.get("under")
+                if over is None or under is None:
+                    continue
+                over_point = pd.to_numeric(over.get("point"), errors="coerce")
+                under_point = pd.to_numeric(under.get("point"), errors="coerce")
+                if pd.isna(over_point) or pd.isna(under_point):
+                    continue
+                if abs(float(over_point) - float(under_point)) > 0.001:
+                    continue
+                total_points = float(over_point)
+                over_price = decimal_to_american(over.get("price"))
+                under_price = decimal_to_american(under.get("price"))
+                total_observed_timestamp = (
+                    candidate.get("last_update")
+                    or candidate.get("lastUpdate")
+                    or book_update
+                )
 
             for market in (
                 book.get("markets")
@@ -442,6 +478,11 @@ def fetch_live_lines(api_key, season, week, active_game_keys):
                             decimal_to_american(
                                 home_decimal
                             ),
+                        "total_points": total_points,
+                        "over_price_american": over_price,
+                        "under_price_american": under_price,
+                        "total_observed_timestamp_et":
+                            total_observed_timestamp,
                         "book_topped_up_clean": clean_bool(
                             book.get("topped_up")
                         ),
@@ -584,6 +625,8 @@ def rebuild_board(base_board, lines):
 
     recalculated_columns = [
         "market_home_spread",
+        "market_total",
+        "total_consensus_books",
         "model_side",
         "edge_points",
         "model_market_gap",
@@ -627,6 +670,9 @@ def rebuild_board(base_board, lines):
         ~core["book_topped_up_clean"].fillna(False)
     )
 
+    if "total_points" not in core.columns:
+        core["total_points"] = np.nan
+
     consensus = (
         core.groupby(
             ["away_team", "home_team"],
@@ -636,6 +682,14 @@ def rebuild_board(base_board, lines):
             market_home_spread=(
                 "home_spread",
                 "median",
+            ),
+            market_total=(
+                "total_points",
+                "median",
+            ),
+            total_consensus_books=(
+                "total_points",
+                "count",
             ),
             consensus_books_available=(
                 "sportsbook",
