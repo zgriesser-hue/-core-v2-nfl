@@ -149,6 +149,67 @@ def add_unit_features(
     return games.merge(pd.DataFrame(rows), on=["game_id", "season", "week"], validate="one_to_one")
 
 
+def add_opponent_adjusted_unit_features(
+    games: pd.DataFrame,
+    alpha: float,
+    carryover: float,
+) -> pd.DataFrame:
+    """Build pregame unit ratings from EPA residuals versus the opposing unit.
+
+    Expected offensive EPA/play is the offense rating minus the opposing
+    defense rating. Half of each residual updates the offense and half updates
+    the opposing defense in the opposite direction. Updates occur only after
+    every game in a week has been captured, preventing same-week leakage.
+    """
+    offense: dict[str, float] = {}
+    defense: dict[str, float] = {}
+    previous_season: int | None = None
+    rows: list[dict[str, float | int | str]] = []
+
+    for (season, week), week_games in games.groupby(["season", "week"], sort=True):
+        season = int(season)
+        if previous_season is not None and season != previous_season:
+            offense = {team: value * carryover for team, value in offense.items()}
+            defense = {team: value * carryover for team, value in defense.items()}
+        previous_season = season
+
+        updates: list[tuple[str, str, float]] = []
+        for game in week_games.itertuples(index=False):
+            home_off = offense.get(game.home_team, 0.0)
+            away_off = offense.get(game.away_team, 0.0)
+            home_def = defense.get(game.home_team, 0.0)
+            away_def = defense.get(game.away_team, 0.0)
+            rows.append({
+                "game_id": game.game_id,
+                "season": season,
+                "week": int(week),
+                "offense_difference": home_off - away_off,
+                "defense_difference": home_def - away_def,
+            })
+
+            if pd.notna(game.home_game_off_epa):
+                expected = home_off - away_def
+                updates.append((game.home_team, game.away_team, game.home_game_off_epa - expected))
+            if pd.notna(game.away_game_off_epa):
+                expected = away_off - home_def
+                updates.append((game.away_team, game.home_team, game.away_game_off_epa - expected))
+
+        for offense_team, defense_team, residual in updates:
+            step = alpha * residual / 2.0
+            offense[offense_team] = offense.get(offense_team, 0.0) + step
+            defense[defense_team] = defense.get(defense_team, 0.0) - step
+
+        # Center the two unit systems separately for identifiability.
+        if offense:
+            off_mean = float(np.mean(list(offense.values())))
+            offense = {team: value - off_mean for team, value in offense.items()}
+        if defense:
+            def_mean = float(np.mean(list(defense.values())))
+            defense = {team: value - def_mean for team, value in defense.items()}
+
+    return games.merge(pd.DataFrame(rows), on=["game_id", "season", "week"], validate="one_to_one")
+
+
 def fit_predict(
     featured: pd.DataFrame,
     fit_seasons: range,
@@ -199,7 +260,7 @@ def main() -> None:
     games = prepare_games(stats, schedule)
     print(f"Complete regular-season games: {len(games):,}")
 
-    candidates: list[dict[str, float]] = []
+    candidates: list[dict[str, float | str | bool]] = []
     for alpha in (0.15, 0.25, 0.35, 0.50, 0.70):
         for carryover in (0.25, 0.45, 0.65, 0.85):
             featured = add_unit_features(games, alpha, carryover)
@@ -211,6 +272,7 @@ def main() -> None:
                     )
                     mae, rmse = metrics(scored, "prediction")
                     candidates.append({
+                        "feature_method": "RAW",
                         "alpha": alpha,
                         "carryover": carryover,
                         "ridge_alpha": ridge_alpha,
@@ -222,23 +284,59 @@ def main() -> None:
                         "defense_coef": coefficients[2] if split_units else coefficients[1],
                     })
 
+    for alpha in (0.10, 0.20, 0.35, 0.50, 0.70, 1.00):
+        for carryover in (0.25, 0.45, 0.65, 0.85):
+            featured = add_opponent_adjusted_unit_features(games, alpha, carryover)
+            for ridge_alpha in (0.0, 1.0, 10.0, 100.0):
+                scored, coefficients = fit_predict(
+                    featured, range(2018, 2020), range(2020, 2023),
+                    ridge_alpha, split_units=True,
+                )
+                mae, rmse = metrics(scored, "prediction")
+                candidates.append({
+                    "feature_method": "OPPONENT_ADJUSTED",
+                    "alpha": alpha,
+                    "carryover": carryover,
+                    "ridge_alpha": ridge_alpha,
+                    "split_units": True,
+                    "validation_mae": mae,
+                    "validation_rmse": rmse,
+                    "intercept": coefficients[0],
+                    "offense_coef": coefficients[1],
+                    "defense_coef": coefficients[2],
+                })
+
     tuning = pd.DataFrame(candidates)
     best_rows = []
-    test_games = []
-    for split_units, label in ((False, "COMBINED_UNIT"), (True, "OFFENSE_DEFENSE_SPLIT")):
-        best = tuning.loc[tuning["split_units"].eq(split_units)].sort_values(
+    test_games: dict[str, pd.DataFrame] = {}
+    specifications = (
+        ("COMBINED_UNIT", "RAW", False, add_unit_features),
+        ("OFFENSE_DEFENSE_SPLIT", "RAW", True, add_unit_features),
+        (
+            "OPPONENT_ADJUSTED_SPLIT",
+            "OPPONENT_ADJUSTED",
+            True,
+            add_opponent_adjusted_unit_features,
+        ),
+    )
+    for label, feature_method, split_units, feature_builder in specifications:
+        best = tuning.loc[
+            tuning["feature_method"].eq(feature_method)
+            & tuning["split_units"].eq(split_units)
+        ].sort_values(
             ["validation_mae", "validation_rmse"]
         ).iloc[0]
-        featured = add_unit_features(games, best.alpha, best.carryover)
+        featured = feature_builder(games, best.alpha, best.carryover)
         scored, coefficients = fit_predict(
             featured, range(2018, 2023), range(2023, 2026),
             best.ridge_alpha, split_units,
         )
         scored["model"] = label
-        test_games.append(scored)
+        test_games[label] = scored
         mae, rmse = metrics(scored, "prediction")
         best_rows.append({
             "model": label,
+            "feature_method": feature_method,
             "alpha": best.alpha,
             "carryover": best.carryover,
             "ridge_alpha": best.ridge_alpha,
@@ -262,7 +360,7 @@ def main() -> None:
     print(comparison.to_string(index=False, float_format=lambda x: f"{x:.5f}"))
 
     by_season = []
-    for scored in test_games:
+    for scored in test_games.values():
         for season, group in scored.groupby("season"):
             mae, rmse = metrics(group, "prediction")
             by_season.append({"model": group["model"].iloc[0], "season": season, "games": len(group), "mae": mae, "rmse": rmse})
@@ -270,40 +368,77 @@ def main() -> None:
     print("=" * 110)
     print(pd.DataFrame(by_season).to_string(index=False, float_format=lambda x: f"{x:.5f}"))
 
-    combined, split = test_games
-    paired = combined[["game_id", "actual_home_margin", "prediction"]].merge(
-        split[["game_id", "prediction"]],
+    paired_comparisons = (
+        ("COMBINED_UNIT", "OFFENSE_DEFENSE_SPLIT"),
+        ("COMBINED_UNIT", "OPPONENT_ADJUSTED_SPLIT"),
+        ("OFFENSE_DEFENSE_SPLIT", "OPPONENT_ADJUSTED_SPLIT"),
+    )
+    for base_label, challenger_label in paired_comparisons:
+        base = test_games[base_label]
+        challenger = test_games[challenger_label]
+        paired = base[["game_id", "actual_home_margin", "prediction"]].merge(
+            challenger[["game_id", "prediction"]],
+            on="game_id",
+            suffixes=("_base", "_challenger"),
+            validate="one_to_one",
+        )
+        base_loss = (
+            paired["actual_home_margin"] - paired["prediction_base"]
+        ).abs()
+        challenger_loss = (
+            paired["actual_home_margin"] - paired["prediction_challenger"]
+        ).abs()
+        improvement = (base_loss - challenger_loss).to_numpy()
+        rng = np.random.default_rng(20260915)
+        bootstrap = np.array([
+            rng.choice(improvement, size=len(improvement), replace=True).mean()
+            for _ in range(20_000)
+        ])
+        print(f"\nPAIRED IMPROVEMENT — {challenger_label} VS {base_label}")
+        print("=" * 110)
+        print(f"Mean MAE improvement: {improvement.mean():.5f}")
+        print(
+            "Bootstrap 95% interval: "
+            f"[{np.quantile(bootstrap, 0.025):.5f}, "
+            f"{np.quantile(bootstrap, 0.975):.5f}]"
+        )
+        print(f"Bootstrap probability improvement > 0: {(bootstrap > 0).mean():.3%}")
+
+    raw = test_games["OFFENSE_DEFENSE_SPLIT"]
+    opponent_adjusted = test_games["OPPONENT_ADJUSTED_SPLIT"]
+    week_comparison = raw[["game_id", "season", "week", "actual_home_margin", "prediction"]].merge(
+        opponent_adjusted[["game_id", "prediction"]],
         on="game_id",
-        suffixes=("_combined", "_split"),
+        suffixes=("_raw", "_opponent_adjusted"),
         validate="one_to_one",
     )
-    combined_loss = (
-        paired["actual_home_margin"] - paired["prediction_combined"]
+    week_comparison["raw_loss"] = (
+        week_comparison["actual_home_margin"] - week_comparison["prediction_raw"]
     ).abs()
-    split_loss = (
-        paired["actual_home_margin"] - paired["prediction_split"]
+    week_comparison["opponent_adjusted_loss"] = (
+        week_comparison["actual_home_margin"]
+        - week_comparison["prediction_opponent_adjusted"]
     ).abs()
-    improvement = (combined_loss - split_loss).to_numpy()
-    rng = np.random.default_rng(20260915)
-    bootstrap = np.array([
-        rng.choice(improvement, size=len(improvement), replace=True).mean()
-        for _ in range(20_000)
-    ])
-    print("\nPAIRED SPLIT IMPROVEMENT")
-    print("=" * 110)
-    print(f"Mean MAE improvement: {improvement.mean():.5f}")
-    print(
-        "Bootstrap 95% interval: "
-        f"[{np.quantile(bootstrap, 0.025):.5f}, "
-        f"{np.quantile(bootstrap, 0.975):.5f}]"
+    week_comparison["week_bucket"] = pd.cut(
+        week_comparison["week"], bins=[0, 4, 9, 18], labels=["W1-4", "W5-9", "W10-18"]
     )
-    print(f"Bootstrap probability improvement > 0: {(bootstrap > 0).mean():.3%}")
+    week_summary = week_comparison.groupby("week_bucket", observed=True).agg(
+        games=("game_id", "size"),
+        raw_mae=("raw_loss", "mean"),
+        opponent_adjusted_mae=("opponent_adjusted_loss", "mean"),
+    )
+    week_summary["opponent_adjusted_improvement"] = (
+        week_summary["raw_mae"] - week_summary["opponent_adjusted_mae"]
+    )
+    print("\nOPPONENT ADJUSTMENT BY WEEK BUCKET")
+    print("=" * 110)
+    print(week_summary.reset_index().to_string(index=False, float_format=lambda x: f"{x:.5f}"))
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         comparison.to_csv(args.output, index=False)
         details_path = args.output.with_name(args.output.stem + "_games.csv")
-        pd.concat(test_games, ignore_index=True).to_csv(details_path, index=False)
+        pd.concat(test_games.values(), ignore_index=True).to_csv(details_path, index=False)
         print(f"\nSaved: {args.output}")
         print(f"Saved: {details_path}")
 
