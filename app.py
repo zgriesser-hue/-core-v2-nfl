@@ -293,7 +293,7 @@ refresh_col, status_col = st.columns(
 
 with refresh_col:
     refresh_clicked = st.button(
-        "🔄 Refresh Live Lines — 1 API request",
+        "🔄 Refresh Live Spreads + Totals — 2 API credits",
         type="primary",
         disabled=not has_api_key,
         use_container_width=True,
@@ -319,7 +319,8 @@ with status_col:
     else:
         st.caption(
             "Displaying the repository snapshot. "
-            "Use the refresh button for a live pull."
+            "Scheduled snapshots are saved three times daily; "
+            "the refresh button is session-only."
         )
 
 if not has_api_key:
@@ -334,7 +335,7 @@ if refresh_clicked:
     )
 
     with st.spinner(
-        "Requesting and validating live spreads..."
+        "Requesting and validating live spreads and totals..."
     ):
         try:
             live_lines, metadata = (
@@ -442,12 +443,18 @@ except Exception as exc:
 # Permanent movement from the market opener
 # --------------------------------------------------------------------------------------------------
 
+for column in ["consensus_open_total", "consensus_open_total_books"]:
+    if column not in openers.columns:
+        openers[column] = pd.NA
+
 opener_fields = openers[
     [
         "away_team",
         "home_team",
         "consensus_open_home_spread",
         "consensus_open_books",
+        "consensus_open_total",
+        "consensus_open_total_books",
         "earliest_core_open_seen_utc",
         "latest_core_open_seen_utc",
         "consensus_method",
@@ -499,6 +506,10 @@ board["open_to_current_move"] = (
     board["market_home_spread"]
     -
     board["consensus_open_home_spread"]
+)
+
+board["total_move_from_open"] = (
+    board["market_total"] - board["consensus_open_total"]
 )
 
 board["open_distance_from_model"] = (
@@ -861,6 +872,12 @@ with tab1:
                 ),
                 axis=1,
             ),
+            "Total": filtered["market_total"].map(
+                lambda value: f"{float(value):.1f}" if pd.notna(value) else "—"
+            ),
+            "Total move": filtered["total_move_from_open"].map(
+                lambda value: f"{float(value):+.1f}" if pd.notna(value) else "—"
+            ),
             "From open": filtered[
                 "open_to_current_move"
             ].map(
@@ -982,6 +999,13 @@ with tab2:
         row["best_book"],
     )
 
+    c3.metric(
+        "Market Total",
+        f'{float(row["market_total"]):.1f}'
+        if pd.notna(row["market_total"])
+        else "—",
+    )
+
     st.divider()
 
     o1, o2, o3 = st.columns(3)
@@ -1003,6 +1027,17 @@ with tab2:
     o3.metric(
         "Market Path",
         row["market_vs_model_path"],
+    )
+
+    st.caption(
+        "Total opener: "
+        + (
+            f'{float(row["consensus_open_total"]):.1f}; '
+            f'move {float(row["total_move_from_open"]):+.1f} points.'
+            if pd.notna(row["consensus_open_total"])
+            and pd.notna(row["total_move_from_open"])
+            else "not yet captured."
+        )
     )
 
     st.caption(
