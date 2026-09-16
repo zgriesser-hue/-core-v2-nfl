@@ -11,6 +11,7 @@ import streamlit as st
 
 from parlay_live import (
     BOOK_DISPLAY,
+    CORE_CONSENSUS_BOOKS,
     EXCLUDED_BOOKS,
     fetch_live_lines,
     format_american,
@@ -438,6 +439,42 @@ except Exception as exc:
         f"a valid board: {type(exc).__name__}: {exc}"
     )
     st.stop()
+
+# A Streamlit process can briefly retain the prior spread-only helper module while
+# loading a newly deployed app. Rebuild totals here when that mixed-version state
+# occurs, and degrade to blank totals rather than taking down the entire dashboard.
+if "market_total" not in board.columns:
+    if "total_points" in current_lines.columns:
+        total_lines = current_lines.copy()
+        total_lines["sportsbook"] = (
+            total_lines["sportsbook"].astype(str).str.strip().str.lower()
+        )
+        total_lines["total_points"] = pd.to_numeric(
+            total_lines["total_points"], errors="coerce"
+        )
+        total_consensus = (
+            total_lines.loc[
+                total_lines["sportsbook"].isin(CORE_CONSENSUS_BOOKS)
+                & ~total_lines["sportsbook"].isin(EXCLUDED_BOOKS)
+            ]
+            .groupby(["away_team", "home_team"], as_index=False)
+            .agg(
+                market_total=("total_points", "median"),
+                total_consensus_books=("total_points", "count"),
+            )
+        )
+        board = board.merge(
+            total_consensus,
+            on=["away_team", "home_team"],
+            how="left",
+            validate="one_to_one",
+        )
+    else:
+        board["market_total"] = pd.NA
+        board["total_consensus_books"] = 0
+
+if "total_consensus_books" not in board.columns:
+    board["total_consensus_books"] = 0
 
 # --------------------------------------------------------------------------------------------------
 # Permanent movement from the market opener
