@@ -6,3 +6,4 @@ captured_at_utc,season,week,markets,requests_used,requests_remaining,games,book_
 2026-09-18T00:37:13+00:00,2026,2,"spreads,totals",43,957,15,225
 2026-09-18T12:35:40+00:00,2026,2,"spreads,totals",45,955,15,218
 2026-09-18T18:32:46+00:00,2026,2,"spreads,totals",47,953,15,224
+2026-09-19T00:37:00+00:00,2026,2,"spreads,totals",50,950,15,218
