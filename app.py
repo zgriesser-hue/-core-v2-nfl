@@ -1097,10 +1097,17 @@ with tab2:
         row["projection_display_status"]
         == "EARLY_PROVISIONAL"
     ):
-        st.warning(
-            "This projection is provisional because "
-            "personnel information is incomplete."
-        )
+        if row.get("qb_availability_provisional", False):
+            st.warning(
+                "QB availability is unresolved. This fair spread includes a "
+                "provisional QB adjustment; the displayed range includes the "
+                "starter and backup scenarios. Review before treating it as a bet."
+            )
+        else:
+            st.warning(
+                "This projection is provisional because "
+                "personnel information is incomplete."
+            )
 
     st.write(
         {
