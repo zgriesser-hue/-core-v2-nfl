@@ -19,6 +19,7 @@ from parlay_live import (
     rebuild_board,
 )
 from parlay_live import select_pregame_game_keys
+from core_v2.bet_tracking import append_bet, load_bets
 
 st.set_page_config(
     page_title="Core V2 NFL Dashboard",
@@ -799,7 +800,7 @@ st.sidebar.caption(
 # Tabs
 # --------------------------------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
     [
         "Market Board",
         "Game Detail",
@@ -807,6 +808,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
         "Line Movement",
         "Power Ratings",
         "Model Performance",
+        "My Bets",
     ]
 )
 
@@ -1756,3 +1758,118 @@ with tab6:
             "Positive is favorable for either metric. "
             "A missed close is left blank and is never reconstructed from an earlier quote."
         )
+
+
+with tab7:
+    st.subheader("My Bets")
+    st.caption(
+        "Record actual Core V2 spread bets here. New entries snapshot the model fair line "
+        "and market consensus currently displayed in the app; later model refreshes do not "
+        "rewrite that decision-time snapshot."
+    )
+
+    bets_path = ROOT / "data" / "tracking" / "my_bets.csv"
+    bets = load_bets(bets_path)
+
+    with st.form("enter_model_bet", clear_on_submit=False):
+        bet_game = st.selectbox("Game", board["matchup"].tolist(), key="bet_game")
+        bet_row = board.loc[board["matchup"].eq(bet_game)].iloc[0]
+        bet_team = st.selectbox(
+            "Team",
+            [str(bet_row["away_team"]), str(bet_row["home_team"])],
+            key="bet_team",
+        )
+        b1, b2, b3 = st.columns(3)
+        bet_spread = b1.number_input("Spread", value=0.0, step=0.5, format="%.1f")
+        bet_odds = b2.number_input("American odds", value=-110, step=1)
+        bet_stake = b3.number_input("Stake ($)", min_value=0.0, value=25.0, step=5.0)
+        sportsbook = st.text_input("Sportsbook", value="bet365")
+        notes = st.text_input("Notes", value="")
+        submitted = st.form_submit_button("Save bet")
+
+        if submitted:
+            entered_at = pd.Timestamp.now(tz="UTC").isoformat()
+            try:
+                game_id_value = str(
+                    bet_row.get(
+                        "game_id",
+                        f"{active_season}_{active_week:02d}_{bet_row['away_team']}_{bet_row['home_team']}",
+                    )
+                )
+                bets = append_bet(
+                    bets_path,
+                    {
+                        "season": int(active_season),
+                        "week": int(active_week),
+                        "game_id": game_id_value,
+                        "matchup": bet_game,
+                        "team": bet_team,
+                        "bet_spread": float(bet_spread),
+                        "odds_american": int(bet_odds),
+                        "sportsbook": sportsbook.strip(),
+                        "stake": float(bet_stake),
+                        "entered_at_utc": entered_at,
+                        "model_fair_home_spread_at_entry": float(bet_row["fair_home_spread"]),
+                        "market_home_spread_at_entry": float(bet_row["market_home_spread"]) if pd.notna(bet_row["market_home_spread"]) else pd.NA,
+                        "model_side_at_entry": str(bet_row.get("model_side", "")),
+                        "model_edge_points_at_entry": float(bet_row["edge_points"]) if pd.notna(bet_row["edge_points"]) else pd.NA,
+                        "status": "OPEN",
+                        "notes": notes.strip(),
+                    },
+                )
+                st.success(
+                    f"Saved {bet_team} {format_spread(float(bet_spread))} "
+                    f"{format_american(int(bet_odds))} at {sportsbook.strip()}."
+                )
+            except OSError:
+                st.error(
+                    "This deployment cannot write persistent files. Download the ledger below "
+                    "and commit it to data/tracking/my_bets.csv, or enter the bet from a writable deployment."
+                )
+
+    if bets.empty:
+        st.info("No model bets recorded yet.")
+    else:
+        display_bets = bets.copy()
+        display_bets["Bet"] = display_bets.apply(
+            lambda row: f"{row['team']} {format_spread(float(row['bet_spread']))} "
+            f"{format_american(float(row['odds_american']))}",
+            axis=1,
+        )
+        display_bets["Stake"] = pd.to_numeric(display_bets["stake"], errors="coerce").map(
+            lambda value: f"USD {value:.2f}" if pd.notna(value) else "—"
+        )
+        display_bets["Entered"] = display_bets["entered_at_utc"].map(display_timestamp)
+        display_bets["Model at entry"] = display_bets["model_fair_home_spread_at_entry"].map(
+            lambda value: f"{float(value):+.2f}" if pd.notna(value) else "Legacy / unavailable"
+        )
+        display_bets["Market at entry"] = display_bets["market_home_spread_at_entry"].map(
+            lambda value: f"{float(value):+.1f}" if pd.notna(value) else "Legacy / unavailable"
+        )
+        st.dataframe(
+            display_bets[
+                ["week", "matchup", "Bet", "sportsbook", "Stake", "Entered",
+                 "Model at entry", "Market at entry", "status"]
+            ].rename(
+                columns={
+                    "week": "Week", "matchup": "Matchup", "sportsbook": "Book",
+                    "status": "Status",
+                }
+            ).sort_values(["Week", "Entered"], ascending=[False, False]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        total_staked = pd.to_numeric(bets["stake"], errors="coerce").sum()
+        st.metric("Tracked stake", f"USD {total_staked:.2f}")
+        st.download_button(
+            "Download bet ledger CSV",
+            data=bets.to_csv(index=False).encode("utf-8"),
+            file_name="my_bets.csv",
+            mime="text/csv",
+        )
+
+    st.caption(
+        "The four Week 3 screenshot bets are seeded in the ledger. Their historical model/market "
+        "snapshots are intentionally blank because those values were not frozen at the moment of entry."
+    )
