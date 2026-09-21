@@ -33,7 +33,7 @@ def main() -> None:
             "fair_spread_home", "fair_spread_low", "fair_spread_high",
             "fair_spread_uncertainty_width", "projection_display_status",
             "personnel_projection_status", "used_personnel_fallback",
-            "personnel_info_complete",
+            "personnel_info_complete", "qb_availability_provisional",
         ]
     ].rename(columns={"fair_spread_home": "fair_home_spread"})
     board["core_v2_home_spread"] = board["fair_home_spread"]
