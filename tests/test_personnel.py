@@ -1,6 +1,10 @@
 import pandas as pd
 
-from core_v2.personnel import build_personnel_adjustments, frozen_status_weight
+from core_v2.personnel import (
+    build_personnel_adjustments,
+    frozen_status_weight,
+    load_weekly_team_adjustments,
+)
 from core_v2.projections import build_projection_board
 
 
@@ -51,3 +55,61 @@ def test_official_non_qb_exposure_uses_frozen_formula():
     assert abs(personnel.loc[0, "personnel_correction_current_clean"] - expected) < 1e-10
     assert bool(personnel.loc[0, "report_coverage_complete_clean"])
     assert audit.loc[0, "match_method"] == "EXACT"
+
+
+def test_persistent_injury_adjustment_expires_and_avoids_report_overlap(tmp_path):
+    path = tmp_path / "weekly.csv"
+    pd.DataFrame([
+        {"season": 2026, "week": 2, "end_week": 5, "team": "LA",
+         "adjustment_points": -0.56, "category": "INJURY", "player": "Myles Garrett",
+         "reason": "IR", "exclude_from_auto": True},
+        {"season": 2026, "week": 2, "team": "LA",
+         "adjustment_points": -0.2, "category": "INJURY", "player": "Other",
+         "reason": "Week 2 only", "exclude_from_auto": False},
+    ]).to_csv(path, index=False)
+    weekly = load_weekly_team_adjustments(path, 2026, 3)
+    assert weekly["player"].tolist() == ["Myles Garrett"]
+    assert load_weekly_team_adjustments(path, 2026, 6).empty
+
+    schedule = pd.DataFrame([{"season": 2026, "week": 3,
+                              "away_team": "LA", "home_team": "DEN"}])
+    roles = pd.DataFrame([{"team": "LA", "player_name": "Myles Garrett",
+                           "position": "LB", "expected_role": 0.9,
+                           "name_key": "myles garrett"}])
+    injury = pd.DataFrame([{"team": "LA", "player_name": "Myles Garrett",
+                            "position_reported": "LB", "practice_status": "DNP",
+                            "game_status": "Out"}])
+    personnel, audit = build_personnel_adjustments(
+        schedule, roles, injury, {"LA", "DEN"}, weekly, 2026, 3
+    )
+    assert audit.loc[0, "excluded_manual_overlap"]
+    assert personnel.loc[0, "manual_adjustment_home"] == 0.56
+    assert personnel.loc[0, "personnel_correction_current_clean"] == 0.56 - 0.00303256
+
+
+def test_uncertain_qb_adjustment_changes_center_and_projection_band():
+    schedule = pd.DataFrame([{"season": 2026, "week": 3,
+                              "away_team": "PHI", "home_team": "CHI"}])
+    roles = pd.DataFrame(columns=["team", "player_name", "position", "expected_role", "name_key"])
+    injury = pd.DataFrame(columns=["team", "player_name", "position_reported",
+                                   "practice_status", "game_status"])
+    weekly = pd.DataFrame([{
+        "team": "CHI", "adjustment_points": -0.75,
+        "category": "QB_PROVISIONAL", "player": "Caleb Williams",
+        "reason": "Bagent scenario", "exclude_from_auto": False,
+        "out_adjustment_points": -1.5,
+    }])
+    personnel, _ = build_personnel_adjustments(
+        schedule, roles, injury, {"PHI", "CHI"}, weekly, 2026, 3
+    )
+    assert personnel.loc[0, "qb_availability_provisional"]
+    assert abs(personnel.loc[0, "personnel_correction_current_clean"] + 0.75303256) < 1e-10
+    assert abs(personnel.loc[0, "personnel_correction_min_clean"] + 1.50303256) < 1e-10
+    assert abs(personnel.loc[0, "personnel_correction_max_clean"] + 0.00303256) < 1e-10
+    ratings = pd.DataFrame([
+        {"team": "PHI", "current_team_rating": 3.0},
+        {"team": "CHI", "current_team_rating": 1.0},
+    ])
+    board = build_projection_board(schedule, ratings, personnel, 2026, 3)
+    assert board.loc[0, "projection_display_status"] == "EARLY_PROVISIONAL"
+    assert abs(board.loc[0, "fair_spread_high"] - board.loc[0, "fair_spread_low"] - 1.5) < 1e-10
