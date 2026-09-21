@@ -1,9 +1,14 @@
-season,week,team,adjustment_points,category,player,reason,exclude_from_auto
-2026,2,NE,-0.35,INJURY,A.J. Brown,High-ankle sprain; active while unavailable,True
-2026,2,SEA,-1.50,QB,Sam Darnold,Drew Lock expected to start Week 2,False
-2026,2,ATL,-0.75,QB,Cooper Rush,Expected Week 2 starter with Tua Tagovailoa and Michael Penix Jr. unavailable,False
-2026,2,ATL,-0.39,INJURY,Da'Shawn Hand,Season-ending quadriceps injury announced after the initial Week 2 report snapshot,False
-2026,2,LA,-0.56,INJURY,Myles Garrett,Knee surgery and injured reserve; unavailable for Week 2,False
-2026,2,PHI,-0.57,INJURY,Landon Dickerson,Placed on injured reserve; unavailable for Week 2,False
-2026,2,NYJ,-0.54,INJURY,Minkah Fitzpatrick,Expected to miss multiple games with a groin injury,False
-2026,2,NYJ,-0.32,INJURY,Omar Cooper Jr.,Expected to miss multiple games; Week 2 unavailable,False
+season,week,team,adjustment_points,category,player,reason,exclude_from_auto,end_week,out_adjustment_points
+2026,2,NE,-0.35,INJURY,A.J. Brown,High-ankle sprain; active while unavailable,True,,
+2026,2,SEA,-1.50,QB,Sam Darnold,Drew Lock expected to start Week 2,False,,
+2026,2,ATL,-0.75,QB,Cooper Rush,Expected Week 2 starter with Tua Tagovailoa and Michael Penix Jr. unavailable,False,,
+2026,2,ATL,-0.39,INJURY,Da'Shawn Hand,Season-ending quadriceps injury announced after the initial Week 2 report snapshot,False,,
+2026,2,LA,-0.56,INJURY,Myles Garrett,Knee surgery and injured reserve; unavailable for Week 2,False,,
+2026,2,PHI,-0.57,INJURY,Landon Dickerson,Placed on injured reserve; unavailable for Week 2,False,,
+2026,2,NYJ,-0.54,INJURY,Minkah Fitzpatrick,Expected to miss multiple games with a groin injury,False,,
+2026,2,NYJ,-0.32,INJURY,Omar Cooper Jr.,Expected to miss multiple games; Week 2 unavailable,False,,
+2026,3,LA,-0.56,INJURY,Myles Garrett,Injured reserve; at least Week 3 through Week 5 per Rams,True,5,
+2026,3,PHI,-0.57,INJURY,Landon Dickerson,Injured reserve; minimum four-game absence from Week 2,True,5,
+2026,3,ATL,-0.39,INJURY,Da'Shawn Hand,Confirmed season-ending injury; carry forward reviewed Week 2 adjustment,True,18,
+2026,3,CHI,-1.125,QB_PROVISIONAL,Caleb Williams,Week 3 provisional 75 percent Bagent start scenario times 1.50-point conditional downgrade; review after practice reports,False,,-1.50
+2026,3,WAS,-1.50,QB_PROVISIONAL,Jayden Daniels,Week 3 provisional Mariota start assumption following elbow dislocation; 1.50-point conditional downgrade; review after imaging,False,,-1.50

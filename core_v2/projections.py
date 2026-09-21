@@ -144,6 +144,8 @@ def build_projection_board(
         "personnel_correction_max_clean",
         "personnel_info_complete",
     ]
+    if "qb_availability_provisional" in personnel.columns:
+        personnel_fields.append("qb_availability_provisional")
     board = board.merge(
         personnel[personnel_fields],
         on=["away_team", "home_team"],
@@ -155,7 +157,11 @@ def build_projection_board(
     ].fillna(False).astype(bool)
 
     correction_available = board["personnel_correction_current_clean"].notna()
-    complete = board["personnel_info_complete"] & correction_available
+    qb_provisional = board.get(
+        "qb_availability_provisional", pd.Series(False, index=board.index)
+    ).fillna(False).astype(bool)
+    complete = board["personnel_info_complete"] & correction_available & ~qb_provisional
+    board["qb_availability_provisional"] = qb_provisional
     board["fair_spread_home"] = np.where(
         correction_available,
         -(

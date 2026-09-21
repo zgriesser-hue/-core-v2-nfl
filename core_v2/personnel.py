@@ -142,14 +142,32 @@ def load_weekly_team_adjustments(path: Path | None, season: int, week: int) -> p
     missing = required - set(adjustments.columns)
     if missing:
         raise ValueError(f"Weekly adjustments missing columns: {sorted(missing)}")
+    start_week = pd.to_numeric(adjustments["week"], errors="raise")
+    end_week = (
+        pd.to_numeric(adjustments["end_week"], errors="coerce").fillna(start_week)
+        if "end_week" in adjustments
+        else start_week
+    )
+    if (end_week < start_week).any() or end_week.gt(18).any():
+        raise ValueError("Weekly adjustment end_week must be between week and 18")
     adjustments = adjustments.loc[
         (pd.to_numeric(adjustments["season"], errors="coerce") == int(season))
-        & (pd.to_numeric(adjustments["week"], errors="coerce") == int(week))
+        & start_week.le(int(week))
+        & end_week.ge(int(week))
     ].copy()
     adjustments["team"] = adjustments["team"].map(normalize_team)
     adjustments["adjustment_points"] = pd.to_numeric(
         adjustments["adjustment_points"], errors="raise"
     )
+    if "out_adjustment_points" in adjustments:
+        provisional = adjustments["category"].eq("QB_PROVISIONAL")
+        out_points = pd.to_numeric(
+            adjustments["out_adjustment_points"], errors="coerce"
+        )
+        if out_points[provisional].isna().any() or (
+            out_points[provisional] > 0
+        ).any():
+            raise ValueError("Provisional QB scenarios require a nonpositive out adjustment")
     for column in columns:
         if column not in adjustments:
             adjustments[column] = "" if column != "exclude_from_auto" else False
@@ -259,6 +277,24 @@ def build_personnel_adjustments(
         "status_weight"
     ].sum().to_dict()
     adjustment_map = weekly_adjustments.groupby("team")["adjustment_points"].sum().to_dict()
+    provisional = weekly_adjustments["category"].eq("QB_PROVISIONAL")
+    if provisional.any():
+        if "out_adjustment_points" not in weekly_adjustments:
+            raise ValueError("Provisional QB scenarios require out_adjustment_points")
+        out_points = pd.to_numeric(
+            weekly_adjustments["out_adjustment_points"], errors="coerce"
+        )
+        if out_points[provisional].isna().any() or (out_points[provisional] > 0).any():
+            raise ValueError("Provisional QB scenarios require a nonpositive out adjustment")
+    else:
+        out_points = pd.Series(np.nan, index=weekly_adjustments.index)
+    low = weekly_adjustments["adjustment_points"].where(
+        ~provisional, out_points
+    )
+    high = weekly_adjustments["adjustment_points"].where(~provisional, 0.0)
+    low_map = low.groupby(weekly_adjustments["team"]).sum().to_dict()
+    high_map = high.groupby(weekly_adjustments["team"]).sum().to_dict()
+    provisional_teams = set(weekly_adjustments.loc[provisional, "team"])
     report_teams = {normalize_team(team) for team in report_teams}
 
     rows: list[dict[str, object]] = []
@@ -270,6 +306,8 @@ def build_personnel_adjustments(
         roles_resolved = away_unresolved == 0.0 and home_unresolved == 0.0
         complete = reports_present and roles_resolved
         manual_home = float(adjustment_map.get(home, 0.0) - adjustment_map.get(away, 0.0))
+        manual_min_home = float(low_map.get(home, 0.0) - high_map.get(away, 0.0))
+        manual_max_home = float(high_map.get(home, 0.0) - low_map.get(away, 0.0))
         current_diff = home_known - away_known
         minimum_diff = home_known - (away_known + away_unresolved)
         maximum_diff = (home_known + home_unresolved) - away_known
@@ -287,8 +325,8 @@ def build_personnel_adjustments(
                 "away_team": away,
                 "home_team": home,
                 "personnel_correction_current_clean": auto_current + manual_home,
-                "personnel_correction_min_clean": auto_min + manual_home,
-                "personnel_correction_max_clean": auto_max + manual_home,
+                "personnel_correction_min_clean": auto_min + manual_min_home,
+                "personnel_correction_max_clean": auto_max + manual_max_home,
                 "report_coverage_complete_clean": complete,
                 "personnel_info_complete": complete,
                 "week1_personnel_status_clean": (
@@ -301,6 +339,7 @@ def build_personnel_adjustments(
                 "away_unresolved_exposure_max": away_unresolved,
                 "home_unresolved_exposure_max": home_unresolved,
                 "manual_adjustment_home": manual_home,
+                "qb_availability_provisional": away in provisional_teams or home in provisional_teams,
             }
         )
     return pd.DataFrame(rows), audit
