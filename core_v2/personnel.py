@@ -116,8 +116,32 @@ def fetch_nfl_injury_report(season: int, week: int, valid_teams: set[str]) -> tu
         timeout=30,
     )
     response.raise_for_status()
+
+    # NFL.com can leave the previous week's injury report behind the next
+    # week's URL early in the week.  Never treat those stale final game
+    # designations (especially OUT/DOUBTFUL) as current-week statuses.
+    soup = BeautifulSoup(response.text, "html.parser")
+    heading_text = " ".join(
+        node.get_text(" ", strip=True)
+        for node in soup.find_all(["title", "h1", "h2"])
+    )
+    week_patterns = [
+        rf"\\bweek\\s*{int(week)}\\b",
+        rf"\\breg(?:ular season)?\\s*{int(week)}\\b",
+    ]
+    if not any(
+        re.search(pattern, heading_text, flags=re.IGNORECASE)
+        for pattern in week_patterns
+    ):
+        raise ValueError(
+            f"NFL injury page does not identify itself as {season} Week {week}; "
+            "refusing to reuse potentially stale prior-week designations"
+        )
+
     report, teams = parse_nfl_injury_html(response.text, valid_teams)
     report["source_url"] = url
+    report["source_season"] = int(season)
+    report["source_week"] = int(week)
     return report, teams
 
 
