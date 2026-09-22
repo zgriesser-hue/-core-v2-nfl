@@ -19,7 +19,7 @@ from parlay_live import (
     rebuild_board,
 )
 from parlay_live import select_pregame_game_keys
-from core_v2.bet_tracking import append_bet, load_bets
+from core_v2.bet_tracking import (append_bet, classify_bet_alignment, load_bets, selected_team_model_spread)
 
 st.set_page_config(
     page_title="Core V2 NFL Dashboard",
@@ -1796,6 +1796,16 @@ with tab7:
                         f"{active_season}_{active_week:02d}_{bet_row['away_team']}_{bet_row['home_team']}",
                     )
                 )
+                selected_model_spread = selected_team_model_spread(
+                    bet_team,
+                    str(bet_row["away_team"]),
+                    str(bet_row["home_team"]),
+                    float(bet_row["fair_home_spread"]),
+                )
+                bet_vs_model_points, bet_alignment = classify_bet_alignment(
+                    float(bet_spread),
+                    selected_model_spread,
+                )
                 bets = append_bet(
                     bets_path,
                     {
@@ -1813,6 +1823,9 @@ with tab7:
                         "market_home_spread_at_entry": float(bet_row["market_home_spread"]) if pd.notna(bet_row["market_home_spread"]) else pd.NA,
                         "model_side_at_entry": str(bet_row.get("model_side", "")),
                         "model_edge_points_at_entry": float(bet_row["edge_points"]) if pd.notna(bet_row["edge_points"]) else pd.NA,
+                        "model_selected_team_spread_at_entry": selected_model_spread,
+                        "bet_vs_model_points": bet_vs_model_points,
+                        "bet_alignment": bet_alignment,
                         "status": "OPEN",
                         "notes": notes.strip(),
                     },
@@ -1846,9 +1859,19 @@ with tab7:
         display_bets["Market at entry"] = display_bets["market_home_spread_at_entry"].map(
             lambda value: f"{float(value):+.1f}" if pd.notna(value) else "Legacy / unavailable"
         )
+        display_bets["Core V2 bet-side fair"] = pd.to_numeric(
+            display_bets["model_selected_team_spread_at_entry"], errors="coerce"
+        ).map(lambda value: format_spread(value) if pd.notna(value) else "—")
+        display_bets["Vs model"] = pd.to_numeric(
+            display_bets["bet_vs_model_points"], errors="coerce"
+        ).map(lambda value: f"{value:+.2f} pts" if pd.notna(value) else "—")
+        display_bets["Alignment"] = display_bets["bet_alignment"].map(
+            {"WITH_MODEL": "With model", "AGAINST_MODEL": "Against model", "NEUTRAL": "Neutral"}
+        ).fillna("—")
         st.dataframe(
             display_bets[
                 ["week", "matchup", "Bet", "sportsbook", "Stake", "Entered",
+                 "Core V2 bet-side fair", "Vs model", "Alignment",
                  "Model at entry", "Market at entry", "status"]
             ].rename(
                 columns={
