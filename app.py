@@ -19,7 +19,7 @@ from parlay_live import (
     rebuild_board,
 )
 from parlay_live import select_pregame_game_keys
-from core_v2.bet_tracking import (append_bet, classify_bet_alignment, load_bets, selected_team_model_spread)
+from core_v2.bet_tracking import (append_bet, classify_bet_alignment, grade_bets_against_closes, load_bets, selected_team_model_spread)
 
 st.set_page_config(
     page_title="Core V2 NFL Dashboard",
@@ -1843,7 +1843,7 @@ with tab7:
     if bets.empty:
         st.info("No model bets recorded yet.")
     else:
-        display_bets = bets.copy()
+        display_bets = grade_bets_against_closes(bets, game_grades)
         display_bets["Bet"] = display_bets.apply(
             lambda row: f"{row['team']} {format_spread(float(row['bet_spread']))} "
             f"{format_american(float(row['odds_american']))}",
@@ -1868,10 +1868,21 @@ with tab7:
         display_bets["Alignment"] = display_bets["bet_alignment"].map(
             {"WITH_MODEL": "With model", "AGAINST_MODEL": "Against model", "NEUTRAL": "Neutral"}
         ).fillna("—")
+        display_bets["Close"] = pd.to_numeric(
+            display_bets["closing_selected_team_spread"], errors="coerce"
+        ).map(lambda value: format_spread(value) if pd.notna(value) else "Pending")
+        display_bets["Actual bet CLV"] = pd.to_numeric(
+            display_bets["actual_bet_clv_points"], errors="coerce"
+        ).map(lambda value: f"{value:+.1f} pts" if pd.notna(value) else "Pending")
+        display_bets["Result"] = display_bets["actual_bet_result"].fillna("Pending")
+        display_bets["P/L"] = pd.to_numeric(
+            display_bets["profit_loss"], errors="coerce"
+        ).map(lambda value: f"USD {value:+.2f}" if pd.notna(value) else "Pending")
         st.dataframe(
             display_bets[
                 ["week", "matchup", "Bet", "sportsbook", "Stake", "Entered",
                  "Core V2 bet-side fair", "Vs model", "Alignment",
+                 "Close", "Actual bet CLV", "Result", "P/L",
                  "Model at entry", "Market at entry", "status"]
             ].rename(
                 columns={
@@ -1884,7 +1895,17 @@ with tab7:
         )
 
         total_staked = pd.to_numeric(bets["stake"], errors="coerce").sum()
-        st.metric("Tracked stake", f"USD {total_staked:.2f}")
+        graded_actual = display_bets.loc[display_bets["actual_bet_result"].isin(["Win", "Loss", "Push"])].copy()
+        actual_wins = int(graded_actual["actual_bet_result"].eq("Win").sum())
+        actual_losses = int(graded_actual["actual_bet_result"].eq("Loss").sum())
+        actual_pushes = int(graded_actual["actual_bet_result"].eq("Push").sum())
+        clv_rows = pd.to_numeric(display_bets["actual_bet_clv_points"], errors="coerce").dropna()
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Tracked stake", f"USD {total_staked:.2f}")
+        m2.metric("Actual bet record", f"{actual_wins}-{actual_losses}-{actual_pushes}")
+        m3.metric("Avg actual bet CLV", f"{clv_rows.mean():+.2f} pts" if not clv_rows.empty else "Pending")
+        total_pnl = pd.to_numeric(graded_actual["profit_loss"], errors="coerce").sum()
+        m4.metric("Actual bet P/L", f"USD {total_pnl:+.2f}" if not graded_actual.empty else "Pending")
         st.download_button(
             "Download bet ledger CSV",
             data=bets.to_csv(index=False).encode("utf-8"),
@@ -1893,6 +1914,7 @@ with tab7:
         )
 
     st.caption(
-        "The four Week 3 screenshot bets are seeded in the ledger. Their historical model/market "
-        "snapshots are intentionally blank because those values were not frozen at the moment of entry."
+        "Actual bet CLV is separate from model-to-close tracking. It compares the exact spread you "
+        "bet with the automated pre-kickoff consensus close from the bettor's perspective; positive "
+        "means you beat the close. If the close was not captured, it stays blank rather than being backfilled."
     )
