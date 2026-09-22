@@ -17,7 +17,7 @@ NFLVERSE_PBP_CSV = (
 QB_USECOLS = [
     "season", "week", "season_type", "game_id", "posteam", "defteam",
     "passer_player_id", "passer_player_name", "qb_epa", "cpoe",
-    "play_type", "pass_attempt", "sack", "scramble",
+    "play_type", "pass_attempt", "sack",
 ]
 
 
@@ -45,8 +45,7 @@ def build_qb_game_panel(pbp: pd.DataFrame, season: int, through_week: int) -> pd
     x["cpoe"] = pd.to_numeric(x["cpoe"], errors="coerce")
     x["pass_attempt"] = pd.to_numeric(x["pass_attempt"], errors="coerce").fillna(0)
     x["sack"] = pd.to_numeric(x["sack"], errors="coerce").fillna(0)
-    x["scramble"] = pd.to_numeric(x["scramble"], errors="coerce").fillna(0)
-    x["qb_dropback"] = ((x["pass_attempt"].eq(1)) | x["sack"].eq(1) | x["scramble"].eq(1)).astype(int)
+        x["qb_dropback"] = ((x["pass_attempt"].eq(1)) | x["sack"].eq(1)).astype(int)
     x = x.loc[x["qb_dropback"].eq(1)].dropna(
         subset=["game_id", "team", "opponent", "passer_player_id", "qb_epa"]
     )
@@ -62,7 +61,6 @@ def build_qb_game_panel(pbp: pd.DataFrame, season: int, through_week: int) -> pd
             qb_epa_per_db=("qb_epa", "mean"),
             cpoe=("cpoe", "mean"),
             sacks=("sack", "sum"),
-            scrambles=("scramble", "sum"),
         )
     )
 
