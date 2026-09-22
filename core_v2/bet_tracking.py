@@ -88,3 +88,59 @@ def classify_bet_alignment(
     else:
         alignment = "NEUTRAL"
     return points, alignment
+
+
+def grade_bets_against_closes(bets: pd.DataFrame, game_grades: pd.DataFrame) -> pd.DataFrame:
+    """Attach actual-wager closing spread, CLV, ATS result, and P/L.
+
+    CLV is always from the bettor's perspective:
+        bet_spread - closing_selected_team_spread
+    Positive CLV means the bettor beat the close.
+    """
+    out = bets.copy()
+    for column in ["closing_selected_team_spread", "actual_bet_clv_points", "actual_bet_result", "profit_loss"]:
+        out[column] = pd.NA
+    if out.empty or game_grades.empty:
+        return out
+
+    grades = game_grades.copy()
+    grades["matchup"] = grades["away_team"].astype(str) + " @ " + grades["home_team"].astype(str)
+    keys = ["season", "week", "matchup"]
+    merged = out.merge(
+        grades[keys + ["away_team", "home_team", "closing_home_spread", "closing_status", "away_score", "home_score"]],
+        on=keys,
+        how="left",
+    )
+
+    def grade_row(row):
+        if row.get("closing_status") != "CAPTURED" or pd.isna(row.get("closing_home_spread")):
+            return pd.Series([pd.NA, pd.NA, pd.NA, pd.NA])
+
+        close = float(row["closing_home_spread"])
+        if str(row["team"]) == str(row["home_team"]):
+            selected_close = close
+            team_score, opp_score = row.get("home_score"), row.get("away_score")
+        elif str(row["team"]) == str(row["away_team"]):
+            selected_close = -close
+            team_score, opp_score = row.get("away_score"), row.get("home_score")
+        else:
+            return pd.Series([pd.NA, pd.NA, pd.NA, pd.NA])
+
+        clv = float(row["bet_spread"]) - selected_close
+        result = pd.NA
+        pnl = pd.NA
+        if pd.notna(team_score) and pd.notna(opp_score):
+            ats_margin = float(team_score) - float(opp_score) + float(row["bet_spread"])
+            if ats_margin > 0:
+                result = "Win"
+                pnl = american_profit(float(row["stake"]), float(row["odds_american"]))
+            elif ats_margin < 0:
+                result = "Loss"
+                pnl = -float(row["stake"])
+            else:
+                result = "Push"
+                pnl = 0.0
+        return pd.Series([selected_close, clv, result, pnl])
+
+    merged[["closing_selected_team_spread", "actual_bet_clv_points", "actual_bet_result", "profit_loss"]] = merged.apply(grade_row, axis=1)
+    return merged
