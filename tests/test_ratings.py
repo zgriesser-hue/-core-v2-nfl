@@ -1,6 +1,6 @@
 import pandas as pd
 
-from core_v2.ratings import latest_fully_graded_week, update_team_ratings
+from core_v2.ratings import (\n    latest_fully_graded_week,\n    update_team_ratings,\n    update_team_ratings_opponent_adjusted,\n)
 
 
 def ratings():
@@ -64,4 +64,28 @@ def test_partial_recompute_does_not_double_count_games():
     pd.testing.assert_series_equal(
         recomputed.set_index("team")["current_team_rating"],
         direct.set_index("team")["current_team_rating"],
+    )
+
+
+
+def test_opponent_adjusted_zero_is_current_model():
+    current = update_team_ratings(ratings(), grades(), 2026, 1)
+    shadow = update_team_ratings_opponent_adjusted(
+        ratings(), grades(), 2026, 1, opponent_shrinkage=0.0
+    )
+    pd.testing.assert_series_equal(
+        current.set_index("team")["current_team_rating"],
+        shadow.set_index("team")["current_team_rating"],
+    )
+
+
+def test_opponent_adjusted_is_zero_sum_and_shrinks_early_signal():
+    current = update_team_ratings(ratings(), grades(), 2026, 1)
+    shadow = update_team_ratings_opponent_adjusted(
+        ratings(), grades(), 2026, 1, opponent_shrinkage=1.0
+    )
+    assert abs(shadow["performance_adjustment"].sum()) < 1e-10
+    assert (
+        shadow["performance_adjustment"].abs().max()
+        < current["performance_adjustment"].abs().max()
     )
