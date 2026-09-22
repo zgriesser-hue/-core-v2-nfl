@@ -77,6 +77,13 @@ def main() -> None:
         week = int(week)
         allowed = set(games["_game_key"])
         quotes = parse_market_payload(payload, 2026, week, allowed, snapshot)
+        captured = set(quotes["game_key"].unique())
+        missing = allowed - captured
+        if missing:
+            raise RuntimeError(
+                "Pregame close response missing scheduled game(s): "
+                + ", ".join(sorted(missing))
+            )
         week_dir = MARKET_ROOT / f"week_{week:02d}"
         week_dir.mkdir(parents=True, exist_ok=True)
         path = week_dir / "market_history.csv"
