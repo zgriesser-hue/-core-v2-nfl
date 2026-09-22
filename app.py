@@ -1771,12 +1771,13 @@ with tab7:
     bets_path = ROOT / "data" / "tracking" / "my_bets.csv"
     bets = bet_tracking.load_bets(bets_path)
 
+    # Keep the matchup selector outside the form. Streamlit forms batch widget
+    # changes until submit, so a dependent Team selectbox inside the same form
+    # cannot refresh immediately when Game changes.
+    bet_game = st.selectbox("Game", board["matchup"].tolist(), key="bet_game")
+    bet_row = board.loc[board["matchup"].eq(bet_game)].iloc[0]
+
     with st.form("enter_model_bet", clear_on_submit=False):
-        bet_game = st.selectbox("Game", board["matchup"].tolist(), key="bet_game")
-        bet_row = board.loc[board["matchup"].eq(bet_game)].iloc[0]
-        # The team choices depend on the selected game. A persistent widget
-        # key can leave Streamlit holding the prior game's options after the
-        # game selectbox changes, so key this widget to the matchup itself.
         bet_team = st.selectbox(
             "Team",
             [str(bet_row["away_team"]), str(bet_row["home_team"])],
