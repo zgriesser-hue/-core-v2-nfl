@@ -30,7 +30,25 @@ def main() -> None:
 
     schedule = load_week_schedule(args.schedule, args.season, args.week)
     valid_teams = set(schedule["away_team"]) | set(schedule["home_team"])
-    injuries, report_teams = fetch_nfl_injury_report(args.season, args.week, valid_teams)
+    try:
+        injuries, report_teams = fetch_nfl_injury_report(args.season, args.week, valid_teams)
+    except ValueError as exc:
+        # Early in a new NFL week, nfl.com may still serve the prior week's
+        # report at the new-week URL. The fetcher deliberately rejects that
+        # stale data. Publishing should continue with zero official-report
+        # coverage so manual weekly adjustments remain available and stale
+        # OUT/DOUBTFUL designations never leak into the new projection board.
+        if "refusing to reuse potentially stale prior-week designations" not in str(exc):
+            raise
+        print(f"EARLY_PROVISIONAL: {exc}")
+        injuries = pd.DataFrame(
+            columns=[
+                "team", "player_name", "position_reported", "injury",
+                "practice_status", "game_status", "source_table",
+                "source_url", "source_season", "source_week",
+            ]
+        )
+        report_teams = set()
     roles = load_role_priors(args.roles)
     weekly = load_weekly_team_adjustments(args.weekly_adjustments, args.season, args.week)
     v2_repairs = load_v2_role_repairs(args.v2_role_repairs, args.season, args.week)
