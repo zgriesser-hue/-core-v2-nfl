@@ -33,7 +33,7 @@ def main() -> None:
     schedule = pd.read_csv(SCHEDULE)
     schedule = schedule.loc[
         (schedule["season"].eq(2026))
-        & (schedule["game_type"].eq("REG"))
+        & (schedule["game_type"].isin(["REG", "POST"]))
         & schedule["gameday"].notna()
         & schedule["gametime"].notna()
     ].copy()
