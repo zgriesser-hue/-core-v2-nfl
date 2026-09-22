@@ -1,0 +1,41 @@
+name: QB OA EPA Research Backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      seasons:
+        description: "Comma-separated seasons"
+        required: true
+        default: "2017,2018,2019,2022,2023,2024,2025"
+      prior_db:
+        description: "QB shrinkage prior dropbacks"
+        required: true
+        default: "120"
+      defense_prior_db:
+        description: "Defense shrinkage prior dropbacks"
+        required: true
+        default: "250"
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project
+        run: python -m pip install -e .
+
+      - name: Run walk-forward QB EPA backtest
+        run: |
+          python scripts/backtest_qb_oa_epa.py \
+            --seasons "${{ inputs.seasons }}" \
+            --prior-db "${{ inputs.prior_db }}" \
+            --defense-prior-db "${{ inputs.defense_prior_db }}"
