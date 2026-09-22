@@ -1,0 +1,29 @@
+name: QB Prior Blend Research Backtest
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/dynamic-qb-oa-epa
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project
+        run: python -m pip install -e .
+
+      - name: Run QB prior plus OA EPA LOSO backtest
+        run: |
+          python scripts/backtest_qb_prior_blend.py \
+            --seasons "2017,2018,2019,2022,2023,2024,2025" \
+            --blend-prior-grid "75,125,175,250,350"
