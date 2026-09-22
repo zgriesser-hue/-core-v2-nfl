@@ -83,6 +83,19 @@ jobs:
             --board current_live_board.csv \
             --lines current_book_lines.csv \
             --openers current_openers.csv
+      - name: Build OA EPA shadow projection
+        shell: bash
+        run: |
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          OUTPUT_DIR="data/production/${TARGET_SEASON}/week_${WEEK_PADDED}"
+          python -m scripts.build_oa_epa_shadow \\
+            --season "$TARGET_SEASON" \\
+            --week "$TARGET_WEEK" \\
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \\
+            --ratings "data/model/team_ratings_${TARGET_SEASON}.csv" \\
+            --personnel "$OUTPUT_DIR/personnel_adjustments.csv" \\
+            --locks data/model/historical_projection_locks.csv \\
+            --output-dir "$OUTPUT_DIR"
       - name: Commit validated release
         shell: bash
         run: |
