@@ -10,7 +10,9 @@ BET_COLUMNS = [
     "bet_id", "season", "week", "game_id", "matchup", "team", "bet_spread",
     "odds_american", "sportsbook", "stake", "entered_at_utc",
     "model_fair_home_spread_at_entry", "market_home_spread_at_entry",
-    "model_side_at_entry", "model_edge_points_at_entry", "status", "notes",
+    "model_side_at_entry", "model_edge_points_at_entry",
+    "model_selected_team_spread_at_entry", "bet_vs_model_points", "bet_alignment",
+    "status", "notes",
 ]
 
 
@@ -56,3 +58,33 @@ def selected_team_close(row: pd.Series, closing_home_spread: float) -> float:
     if str(row["team"]) == str(row.get("home_team")):
         return float(closing_home_spread)
     return -float(closing_home_spread)
+
+
+def selected_team_model_spread(team: str, away_team: str, home_team: str, fair_home_spread: float) -> float:
+    """Convert the home-team fair spread to the selected team's spread."""
+    fair_home_spread = float(fair_home_spread)
+    if str(team) == str(home_team):
+        return fair_home_spread
+    if str(team) == str(away_team):
+        return -fair_home_spread
+    raise ValueError(f"Bet team {team} is not in {away_team} @ {home_team}")
+
+
+def classify_bet_alignment(
+    bet_spread: float,
+    selected_team_model_spread_value: float,
+    neutral_tolerance: float = 0.25,
+) -> tuple[float, str]:
+    """Positive points means the bettor got a better spread than Core V2 fair.
+
+    This is price alignment, not a claim that the model explicitly selected the
+    opposite team. A small difference is labeled NEUTRAL.
+    """
+    points = float(bet_spread) - float(selected_team_model_spread_value)
+    if points > neutral_tolerance:
+        alignment = "WITH_MODEL"
+    elif points < -neutral_tolerance:
+        alignment = "AGAINST_MODEL"
+    else:
+        alignment = "NEUTRAL"
+    return points, alignment
