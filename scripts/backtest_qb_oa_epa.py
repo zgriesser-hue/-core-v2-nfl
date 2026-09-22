@@ -18,15 +18,15 @@ def load_season(season: int) -> pd.DataFrame:
     raw = gzip.decompress(r.content)
     cols = [
         "season", "week", "season_type", "game_id", "posteam", "defteam",
-        "passer_player_id", "passer_player_name", "qb_epa", "pass_attempt", "sack", "scramble",
+        "passer_player_id", "passer_player_name", "qb_epa", "pass_attempt", "sack",
     ]
     x = pd.read_csv(BytesIO(raw), usecols=cols, low_memory=False)
-    for c in ["season", "week", "qb_epa", "pass_attempt", "sack", "scramble"]:
+    for c in ["season", "week", "qb_epa", "pass_attempt", "sack"]:
         x[c] = pd.to_numeric(x[c], errors="coerce")
     return x.loc[
         x["season"].eq(season)
         & x["season_type"].astype(str).eq("REG")
-        & ((x["pass_attempt"].eq(1)) | x["sack"].eq(1) | x["scramble"].eq(1))
+        & ((x["pass_attempt"].eq(1)) | x["sack"].eq(1))
     ].dropna(subset=["passer_player_id", "posteam", "defteam", "qb_epa"])
 
 
