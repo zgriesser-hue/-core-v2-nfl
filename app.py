@@ -19,7 +19,7 @@ from parlay_live import (
     rebuild_board,
 )
 from parlay_live import select_pregame_game_keys
-from core_v2.bet_tracking import (append_bet, classify_bet_alignment, grade_bets_against_closes, load_bets, selected_team_model_spread)
+from core_v2 import bet_tracking
 
 st.set_page_config(
     page_title="Core V2 NFL Dashboard",
@@ -1769,7 +1769,7 @@ with tab7:
     )
 
     bets_path = ROOT / "data" / "tracking" / "my_bets.csv"
-    bets = load_bets(bets_path)
+    bets = bet_tracking.load_bets(bets_path)
 
     with st.form("enter_model_bet", clear_on_submit=False):
         bet_game = st.selectbox("Game", board["matchup"].tolist(), key="bet_game")
@@ -1796,17 +1796,17 @@ with tab7:
                         f"{active_season}_{active_week:02d}_{bet_row['away_team']}_{bet_row['home_team']}",
                     )
                 )
-                selected_model_spread = selected_team_model_spread(
+                selected_model_spread = bet_tracking.selected_team_model_spread(
                     bet_team,
                     str(bet_row["away_team"]),
                     str(bet_row["home_team"]),
                     float(bet_row["fair_home_spread"]),
                 )
-                bet_vs_model_points, bet_alignment = classify_bet_alignment(
+                bet_vs_model_points, bet_alignment = bet_tracking.classify_bet_alignment(
                     float(bet_spread),
                     selected_model_spread,
                 )
-                bets = append_bet(
+                bets = bet_tracking.append_bet(
                     bets_path,
                     {
                         "season": int(active_season),
@@ -1843,7 +1843,7 @@ with tab7:
     if bets.empty:
         st.info("No model bets recorded yet.")
     else:
-        display_bets = grade_bets_against_closes(bets, game_grades)
+        display_bets = bet_tracking.grade_bets_against_closes(bets, game_grades)
         display_bets["Bet"] = display_bets.apply(
             lambda row: f"{row['team']} {format_spread(float(row['bet_spread']))} "
             f"{format_american(float(row['odds_american']))}",
