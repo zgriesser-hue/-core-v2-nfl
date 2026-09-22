@@ -45,7 +45,7 @@ def build_qb_game_panel(pbp: pd.DataFrame, season: int, through_week: int) -> pd
     x["cpoe"] = pd.to_numeric(x["cpoe"], errors="coerce")
     x["pass_attempt"] = pd.to_numeric(x["pass_attempt"], errors="coerce").fillna(0)
     x["sack"] = pd.to_numeric(x["sack"], errors="coerce").fillna(0)
-        x["qb_dropback"] = ((x["pass_attempt"].eq(1)) | x["sack"].eq(1)).astype(int)
+    x["qb_dropback"] = ((x["pass_attempt"].eq(1)) | x["sack"].eq(1)).astype(int)
     x = x.loc[x["qb_dropback"].eq(1)].dropna(
         subset=["game_id", "team", "opponent", "passer_player_id", "qb_epa"]
     )
