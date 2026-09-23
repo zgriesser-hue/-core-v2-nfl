@@ -16,6 +16,7 @@ STATE_COLUMNS = [
     "qb_value",
     "personnel_adjustment",
     "market_strength",
+    "manual_overall_adjustment",
     "state_version",
 ]
 
@@ -37,6 +38,9 @@ PROJECTION_COLUMNS = [
     "persistent_team_component_home",
     "qb_component_home",
     "personnel_component_home",
+    "manual_overall_component_home",
+    "home_overall_rating",
+    "away_overall_rating",
     "projected_home_margin",
     "fair_spread_home",
     "state_version",
@@ -106,6 +110,7 @@ def initialize_state(
     state["qb_value"] = 0.0
     state["personnel_adjustment"] = 0.0
     state["market_strength"] = 0.0
+    state["manual_overall_adjustment"] = 0.0
     state["state_version"] = config.state_version
     return state[STATE_COLUMNS].sort_values("team").reset_index(drop=True)
 
@@ -144,6 +149,7 @@ def project_week(
         "defense_strength",
         "qb_value",
         "personnel_adjustment",
+        "manual_overall_adjustment",
         "state_version",
     ]
     away = entering[fields].rename(columns={c: f"away_{c}" for c in fields if c != "team"} | {"team": "away_team"})
@@ -158,6 +164,7 @@ def project_week(
         "away_defense_strength", "home_defense_strength",
         "away_qb_value", "home_qb_value",
         "away_personnel_adjustment", "home_personnel_adjustment",
+        "away_manual_overall_adjustment", "home_manual_overall_adjustment",
     ]
     if board[needed].isna().any().any():
         raise ValueError("At least one scheduled team is missing from the entering V3 state")
@@ -179,10 +186,22 @@ def project_week(
     board["personnel_component_home"] = (
         board["home_personnel_adjustment"] - board["away_personnel_adjustment"]
     )
+    board["manual_overall_component_home"] = (
+        board["home_manual_overall_adjustment"] - board["away_manual_overall_adjustment"]
+    )
+    board["home_overall_rating"] = (
+        board["home_offense_strength"] + board["home_defense_strength"]
+        + board["home_manual_overall_adjustment"]
+    )
+    board["away_overall_rating"] = (
+        board["away_offense_strength"] + board["away_defense_strength"]
+        + board["away_manual_overall_adjustment"]
+    )
     board["projected_home_margin"] = (
         board["persistent_team_component_home"]
         + board["qb_component_home"]
         + board["personnel_component_home"]
+        + board["manual_overall_component_home"]
         + board["hfa_component"]
     )
     board["fair_spread_home"] = -board["projected_home_margin"]
