@@ -1,0 +1,2 @@
+season,week,game_key,away_team,home_team,closing_home_spread,consensus_books,snapshot_timestamp_utc,kickoff_utc,closing_method
+2026,3,2026_W3_ATL_GB,ATL,GB,-4.5,4,2026-09-24T23:34:24+00:00,2026-09-25 00:15:00+00:00,MEDIAN_CORE_BOOKS_PREKICK
