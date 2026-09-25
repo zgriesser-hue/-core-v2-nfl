@@ -742,6 +742,11 @@ market_timestamp = (
 # Sidebar
 # --------------------------------------------------------------------------------------------------
 
+st.sidebar.subheader("Dashboard")
+st.sidebar.page_link("app.py", label="V2 Dashboard", icon="2️⃣")
+st.sidebar.page_link("pages/1_V3_Dashboard.py", label="V3 Dashboard", icon="3️⃣")
+st.sidebar.divider()
+
 st.sidebar.header("Core V2 Controls")
 
 minimum_edge = st.sidebar.slider(
