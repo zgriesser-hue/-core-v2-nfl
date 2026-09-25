@@ -2,7 +2,7 @@ name: Grade completed games
 
 on:
   schedule:
-    - cron: "30 12 * * 1-3"
+    - cron: "30 12 * * 1-3,5"
   workflow_dispatch:
     inputs:
       season:
