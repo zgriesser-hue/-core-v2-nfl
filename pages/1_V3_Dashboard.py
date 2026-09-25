@@ -334,7 +334,7 @@ if market_status == "disabled_missing_week2_v3_pregame_snapshot":
     st.sidebar.write("V3.3 market signal: **OFF for Week 3** — missing preserved Week 2 V3 pregame snapshot")
 else:
     st.sidebar.write(f"V3.3 market signal status: **{market_status}**")
-st.sidebar.write("PVAR: **not wired**; personnel adjustment = 0")
+st.sidebar.write("Personnel: **V2 bridge active** (temporary); native V3 PVAR remains in development")
 
 tab1, tab2, tab3 = st.tabs(["Market Board", "Game Detail", "My Bets"])
 
