@@ -496,29 +496,32 @@ def test_full_pipeline_matches_manual_v32_v33_definitions():
 
 def test_persistent_margin_matches_full_offense_defense_formula():
     """
-    persistent_margin(overall_prior_home, overall_prior_away) must
-    equal the full (home_off + home_def) - (away_off + away_def)
-    formula exactly, since offense_strength + defense_strength ==
-    overall_prior by construction - this is the whole reason the
-    points<->EPA conversion isn't needed for the margin itself.
+    persistent_margin(home_off, home_def, away_off, away_def) must
+    equal (home_off + home_def) - (away_off + away_def).
     """
     from v3_model import production_v3
 
     home_off, home_def = 1.5, 0.7
     away_off, away_def = -0.5, -1.2
-    overall_prior_home = home_off + home_def
-    overall_prior_away = away_off + away_def
 
-    full_formula = (home_off + home_def) - (away_off + away_def)
-    shortcut = production_v3.persistent_margin(overall_prior_home, overall_prior_away)
+    expected = (home_off + home_def) - (away_off + away_def)
+    actual = production_v3.persistent_margin(
+        home_off, home_def, away_off, away_def
+    )
 
-    assert shortcut == pytest.approx(full_formula)
+    assert actual == pytest.approx(expected)
 
 
 def test_predict_week_points_scale_neutral_site_cancels_hfa_exactly():
     from v3_model import production_v3
 
-    overall_ratings = pd.DataFrame({"team": ["A", "B"], "overall_rating": [2.0, -1.0]})
+    ratings = pd.DataFrame(
+        {
+            "team": ["A", "B"],
+            "offense_strength": [1.5, -0.5],
+            "defense_strength": [0.5, -0.5],
+        }
+    )
 
     def make_matchup(neutral):
         return pd.DataFrame(
@@ -530,40 +533,22 @@ def test_predict_week_points_scale_neutral_site_cancels_hfa_exactly():
             }
         )
 
-    home_result = production_v3.predict_week_points_scale(overall_ratings, make_matchup(False)).iloc[0]
-    neutral_result = production_v3.predict_week_points_scale(overall_ratings, make_matchup(True)).iloc[0]
+    home_result = production_v3.predict_week_points_scale(
+        ratings, make_matchup(False)
+    ).iloc[0]
+    neutral_result = production_v3.predict_week_points_scale(
+        ratings, make_matchup(True)
+    ).iloc[0]
 
-    assert home_result["pred_v3_lite"] == pytest.approx(home_result["persistent_margin"] + production_v3.EXPERIMENTAL_HFA_DEFAULT)
-    assert neutral_result["pred_v3_lite"] == pytest.approx(neutral_result["persistent_margin"])
+    assert home_result["pred_v3_lite"] == pytest.approx(
+        home_result["persistent_margin"] + production_v3.EXPERIMENTAL_HFA_DEFAULT
+    )
+    assert neutral_result["pred_v3_lite"] == pytest.approx(
+        neutral_result["persistent_margin"]
+    )
     assert neutral_result["pred_v3_lite"] == pytest.approx(
         home_result["pred_v3_lite"] - production_v3.EXPERIMENTAL_HFA_DEFAULT
     )
-
-
-def test_update_overall_rating_moves_toward_the_team_that_outperformed():
-    from v3_model import production_v3
-
-    # Home team beat its projection by a lot -> home rating should rise,
-    # away rating should fall by exactly the same amount (zero-sum).
-    result = production_v3.update_overall_rating(
-        home_rating=3.0, away_rating=-1.0,
-        actual_home_margin=14.0, projected_home_margin=5.0,
-    )
-    assert result.home_rating > 3.0
-    assert result.away_rating < -1.0
-    assert (result.home_rating - 3.0) == pytest.approx(-(result.away_rating - (-1.0)))
-
-
-def test_update_overall_rating_respects_the_cap():
-    from v3_model import production_v3
-
-    # Enormous residual should still be clipped to +-cap on the adjustment.
-    result = production_v3.update_overall_rating(
-        home_rating=0.0, away_rating=0.0,
-        actual_home_margin=100.0, projected_home_margin=0.0,
-        cap=0.75,
-    )
-    assert abs(result.home_adjustment) == pytest.approx(0.75)
 
 
 # ---------------------------------------------------------------
