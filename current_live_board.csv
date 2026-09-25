@@ -1,5 +1,5 @@
 season,week,game_key,away_team,home_team,fair_home_spread,fair_spread_low,fair_spread_high,fair_spread_uncertainty_width,projection_display_status,personnel_projection_status,used_personnel_fallback,personnel_info_complete,qb_availability_provisional,core_v2_home_spread,matchup
-2026,3,2026_W3_ATL_GB,ATL,GB,-7.313,-7.313,-7.313,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-7.313,ATL @ GB
+2026,3,2026_W3_ATL_GB,ATL,GB,-5.813,-5.813,-5.813,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-5.813,ATL @ GB
 2026,3,2026_W3_LAC_BUF,LAC,BUF,-7.109,-7.109,-7.109,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-7.109,LAC @ BUF
 2026,3,2026_W3_CAR_CLE,CAR,CLE,0.383,0.383,0.383,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,0.383,CAR @ CLE
 2026,3,2026_W3_NYJ_DET,NYJ,DET,-7.803,-7.803,-7.803,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-7.803,NYJ @ DET
