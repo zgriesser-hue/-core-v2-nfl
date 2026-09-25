@@ -182,8 +182,8 @@ def board_for_rebuild(v3_board: pd.DataFrame) -> pd.DataFrame:
 
 st.title("\U0001f3c8 V3 NFL Dashboard")
 st.caption(
-    "V3 fair lines vs. market, built from the frozen V3.0-V3.4 research "
-    "(rating + personnel + market + neutral-site)."
+    "Live 2026 V3 fair lines: frozen Andy/Drew preseason offense/defense priors "
+    "+ EPA state updates + HFA/neutral-site. Market lines shown here are comparison-only."
 )
 
 st.info(
@@ -323,9 +323,18 @@ minimum_edge = st.sidebar.slider(
 )
 
 st.sidebar.divider()
-st.sidebar.write("Model: **V3 (V3.0 + market)** - personnel not yet wired")
-st.sidebar.write("Rating solver: prior-anchored offense/defense, full-history fit")
-st.sidebar.write("Market signal: lagged EWM(5), full-history beta")
+st.sidebar.write("Model: **2026 V3 live state**")
+st.sidebar.write("Rating update: z-standardized EPA bridge; offense prior 8 games / defense prior 20 games")
+st.sidebar.write("HFA: 2.20 pts; true neutral sites: 0")
+market_status = (
+    str(raw_board["market_signal_status"].iloc[0])
+    if "market_signal_status" in raw_board.columns else "unknown"
+)
+if market_status == "disabled_missing_week2_v3_pregame_snapshot":
+    st.sidebar.write("V3.3 market signal: **OFF for Week 3** — missing preserved Week 2 V3 pregame snapshot")
+else:
+    st.sidebar.write(f"V3.3 market signal status: **{market_status}**")
+st.sidebar.write("PVAR: **not wired**; personnel adjustment = 0")
 
 tab1, tab2, tab3 = st.tabs(["Market Board", "Game Detail", "My Bets"])
 
