@@ -315,11 +315,6 @@ else:
     # margin convention directly in board.py).
     board["market_display"] = -board["market_home_spread"]
 
-st.sidebar.subheader("Dashboard")
-st.sidebar.markdown("[2️⃣ V2 Dashboard](./)")
-st.sidebar.markdown("[3️⃣ V3 Dashboard](./1_V3_Dashboard)")
-st.sidebar.divider()
-
 st.sidebar.header("V3 Controls")
 
 minimum_edge = st.sidebar.slider(
