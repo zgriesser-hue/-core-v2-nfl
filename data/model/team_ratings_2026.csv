@@ -1,33 +1,33 @@
 team,team_name,base_prior,qb_adjustment,manual_personnel_adjustment,manual_injury_adjustment,current_team_rating,rank,prior_status,adjustment_notes,rating_before_performance,performance_complete_through_week,performance_update_status,latest_week_games_graded,latest_week_games_scheduled,performance_adjustment,games_in_performance_update,performance_update_through_week,performance_learning_rate,performance_team_game_cap
-ARI,Arizona Cardinals,-4.2393125,0.0,0.0,-0.15,-4.3893125,28,Verified exact,Love roughly 50/50 for Week 1; Conner IR was not separately priced because the pod's skill grade centered on Love/Allgeier.,-4.3893125,2,COMPLETE,16,16,0.0,2,2,0.1,0.75
-ATL,Atlanta Falcons,-3.9393125,0.0,0.0,0.0,-4.8082125,29,Verified / approx,,-3.9393125,2,COMPLETE,16,16,-0.8689,2,2,0.1,0.75
-BAL,Baltimore Ravens,3.9956875,0.0,0.0,-0.25,3.7456875,4,Verified / approx,"Danny Pinter suffered a season-ending patellar-tendon injury after the preview, weakening an already unsettled center replacement plan.",3.7456875,2,COMPLETE,16,16,0.0,2,2,0.1,0.75
-BUF,Buffalo Bills,4.4206875,0.0,0.0,0.0,4.8198875,2,Verified pair / attribution provisional,,4.4206875,2,COMPLETE,16,16,0.3992,2,2,0.1,0.75
-CAR,Carolina Panthers,-2.9393125,0.0,0.0,0.0,-2.9393125,25,Verified,,-2.9393125,2,COMPLETE,16,16,0.0,2,2,0.1,0.75
-CHI,Chicago Bears,1.6606875,0.0,0.0,-0.15,1.7854375000000002,14,Verified,Coby Bryant moved to IR after knee surgery. No Luther Burden penalty: he returned and is expected to play Week 1.,1.5106875000000002,2,COMPLETE,16,16,0.27475000000000005,2,2,0.1,0.75
-CIN,Cincinnati Bengals,1.2756875,0.0,0.0,0.0,2.0488875,11,Verified,,1.2756875,2,COMPLETE,16,16,0.7732000000000001,2,2,0.1,0.75
-CLE,Cleveland Browns,-4.6243125,-0.75,0.0,0.0,-5.5219125,31,Verified pair / attribution provisional,Podcast rating assumed Shedeur Sanders; Deshaun Watson was subsequently named the Week 1 starter. Conservative partial market-sized downgrade.,-5.3743125,2,COMPLETE,16,16,-0.14760000000000006,2,2,0.1,0.75
-DAL,Dallas Cowboys,1.8856875,0.0,0.0,0.0,1.8883874999999999,13,Verified pair / attribution provisional,,1.8856875,2,COMPLETE,16,16,0.0027000000000000357,2,2,0.1,0.75
-DEN,Denver Broncos,2.8806875,0.0,0.0,0.0,2.3946375,9,Verified,,2.8806875,2,COMPLETE,16,16,-0.48605,2,2,0.1,0.75
-DET,Detroit Lions,2.2006875,0.0,0.0,0.0,1.6618875,15,Verified / approx,,2.2006875,2,COMPLETE,16,16,-0.5388,2,2,0.1,0.75
-GB,Green Bay Packers,0.6206875,0.0,0.0,0.0,-0.0855125000000001,16,Inferred counterpart,,0.6206875,2,COMPLETE,16,16,-0.7062,2,2,0.1,0.75
-HOU,Houston Texans,0.2156874999999998,0.0,0.0,0.0,-0.6146625000000003,19,Verified,,0.2156874999999998,2,COMPLETE,16,16,-0.8303500000000001,2,2,0.1,0.75
-IND,Indianapolis Colts,0.2656874999999998,0.0,0.0,0.0,-0.3765625000000002,18,Verified pair / attribution provisional,,0.2656874999999998,2,COMPLETE,16,16,-0.64225,2,2,0.1,0.75
-JAX,Jacksonville Jaguars,1.5486874999999998,0.0,0.0,0.0,2.0317875,12,Verified,,1.5486874999999998,2,COMPLETE,16,16,0.4831000000000001,2,2,0.1,0.75
-KC,Kansas City Chiefs,2.5606875,0.0,0.0,0.0,3.2029375,7,Approx,,2.5606875,2,COMPLETE,16,16,0.64225,2,2,0.1,0.75
-LA,Los Angeles Rams,6.2606875,0.0,0.0,0.0,6.110437500000001,1,Inferred counterpart,,6.2606875,2,COMPLETE,16,16,-0.15025,2,2,0.1,0.75
-LAC,Los Angeles Chargers,1.4106875,0.0,0.0,0.0,-0.0893124999999999,17,Verified pair / attribution provisional,,1.4106875,2,COMPLETE,16,16,-1.5,2,2,0.1,0.75
-LV,Las Vegas Raiders,-3.9393125,0.0,0.0,0.0,-2.6568625,24,Verified pair / attribution provisional,,-3.9393125,2,COMPLETE,16,16,1.28245,2,2,0.1,0.75
-MIA,Miami Dolphins,-5.1343125,0.0,0.0,0.0,-6.2385625000000005,32,Verified pair / attribution provisional,,-5.1343125,2,COMPLETE,16,16,-1.10425,2,2,0.1,0.75
-MIN,Minnesota Vikings,1.0256874999999996,0.0,0.0,0.0,2.2135374999999997,10,Verified,,1.0256874999999996,2,COMPLETE,16,16,1.18785,2,2,0.1,0.75
-NE,New England Patriots,3.0356875,0.0,0.0,0.0,3.5143125,5,Verified,,3.0356875,2,COMPLETE,16,16,0.4786250000000001,2,2,0.1,0.75
-NO,New Orleans Saints,-2.3393125,0.0,0.0,0.0,-1.2970125000000001,21,Verified,,-2.3393125,2,COMPLETE,16,16,1.0423,2,2,0.1,0.75
-NYG,New York Giants,-3.589312500000001,0.0,0.0,0.0,-3.625162500000001,26,Verified,,-3.589312500000001,2,COMPLETE,16,16,-0.03584999999999994,2,2,0.1,0.75
-NYJ,New York Jets,-4.6843125,0.0,0.0,0.0,-3.9407125,27,Verified / approx,,-4.6843125,2,COMPLETE,16,16,0.7436,2,2,0.1,0.75
-PHI,Philadelphia Eagles,3.1156875,0.0,0.0,0.0,2.7669875,8,Verified,,3.1156875,2,COMPLETE,16,16,-0.3487,2,2,0.1,0.75
-PIT,Pittsburgh Steelers,-1.4993125000000005,0.0,0.0,0.0,-1.8941125000000005,22,Verified,,-1.4993125000000005,2,COMPLETE,16,16,-0.39480000000000004,2,2,0.1,0.75
-SEA,Seattle Seahawks,3.1606875,0.0,0.0,0.0,3.9457625,3,Verified,,3.1606875,2,COMPLETE,16,16,0.785075,2,2,0.1,0.75
-SF,San Francisco 49ers,1.6606875,0.0,0.0,0.25,3.2324875000000004,6,Verified pair / attribution provisional,"Podcast explicitly carried George Kittle as out for Week 1; he is now traveling and progressing. Bosa was already assumed healthy, so uplift is limited.",1.9106875,2,COMPLETE,16,16,1.3218,2,2,0.1,0.75
-TB,Tampa Bay Buccaneers,-0.5143125000000002,0.0,0.0,0.0,-1.2093125000000002,20,Verified,,-0.5143125000000002,2,COMPLETE,16,16,-0.6950000000000001,2,2,0.1,0.75
-TEN,Tennessee Titans,-4.4393125,0.0,0.0,0.0,-5.1118625,30,Approx,,-4.4393125,2,COMPLETE,16,16,-0.67255,2,2,0.1,0.75
-WAS,Washington Commanders,-1.3193125,0.0,0.0,-0.75,-2.3646625,23,Verified pair / attribution provisional,Post-preview losses of LT Laremy Tunsil and DT Jer'Zhan Newton to IR; most of the charge is the starting left tackle downgrade.,-2.0693125,2,COMPLETE,16,16,-0.2953500000000001,2,2,0.1,0.75
+ARI,Arizona Cardinals,-4.2393125,0.0,0.0,-0.15,-4.3893125,29,Verified exact,Love roughly 50/50 for Week 1; Conner IR was not separately priced because the pod's skill grade centered on Love/Allgeier.,-4.3893125,2,PARTIAL,1,16,0.0,2,3,0.1,0.75
+ATL,Atlanta Falcons,-3.9393125,0.0,0.0,0.0,-4.0582125,28,Verified / approx,,-3.9393125,2,PARTIAL,1,16,-0.1189,3,3,0.1,0.75
+BAL,Baltimore Ravens,3.9956875,0.0,0.0,-0.25,3.7456875,4,Verified / approx,"Danny Pinter suffered a season-ending patellar-tendon injury after the preview, weakening an already unsettled center replacement plan.",3.7456875,2,PARTIAL,1,16,0.0,2,3,0.1,0.75
+BUF,Buffalo Bills,4.4206875,0.0,0.0,0.0,4.8198875,2,Verified pair / attribution provisional,,4.4206875,2,PARTIAL,1,16,0.3992,2,3,0.1,0.75
+CAR,Carolina Panthers,-2.9393125,0.0,0.0,0.0,-2.9393125,25,Verified,,-2.9393125,2,PARTIAL,1,16,0.0,2,3,0.1,0.75
+CHI,Chicago Bears,1.6606875,0.0,0.0,-0.15,1.7854375000000002,14,Verified,Coby Bryant moved to IR after knee surgery. No Luther Burden penalty: he returned and is expected to play Week 1.,1.5106875000000002,2,PARTIAL,1,16,0.27475000000000005,2,3,0.1,0.75
+CIN,Cincinnati Bengals,1.2756875,0.0,0.0,0.0,2.0488875,11,Verified,,1.2756875,2,PARTIAL,1,16,0.7732000000000001,2,3,0.1,0.75
+CLE,Cleveland Browns,-4.6243125,-0.75,0.0,0.0,-5.5219125,31,Verified pair / attribution provisional,Podcast rating assumed Shedeur Sanders; Deshaun Watson was subsequently named the Week 1 starter. Conservative partial market-sized downgrade.,-5.3743125,2,PARTIAL,1,16,-0.14760000000000006,2,3,0.1,0.75
+DAL,Dallas Cowboys,1.8856875,0.0,0.0,0.0,1.8883874999999999,13,Verified pair / attribution provisional,,1.8856875,2,PARTIAL,1,16,0.0027000000000000357,2,3,0.1,0.75
+DEN,Denver Broncos,2.8806875,0.0,0.0,0.0,2.3946375,9,Verified,,2.8806875,2,PARTIAL,1,16,-0.48605,2,3,0.1,0.75
+DET,Detroit Lions,2.2006875,0.0,0.0,0.0,1.6618875,15,Verified / approx,,2.2006875,2,PARTIAL,1,16,-0.5388,2,3,0.1,0.75
+GB,Green Bay Packers,0.6206875,0.0,0.0,0.0,-0.8355125,19,Inferred counterpart,,0.6206875,2,PARTIAL,1,16,-1.4562,3,3,0.1,0.75
+HOU,Houston Texans,0.2156874999999998,0.0,0.0,0.0,-0.6146625000000003,18,Verified,,0.2156874999999998,2,PARTIAL,1,16,-0.8303500000000001,2,3,0.1,0.75
+IND,Indianapolis Colts,0.2656874999999998,0.0,0.0,0.0,-0.3765625000000002,17,Verified pair / attribution provisional,,0.2656874999999998,2,PARTIAL,1,16,-0.64225,2,3,0.1,0.75
+JAX,Jacksonville Jaguars,1.5486874999999998,0.0,0.0,0.0,2.0317875,12,Verified,,1.5486874999999998,2,PARTIAL,1,16,0.4831000000000001,2,3,0.1,0.75
+KC,Kansas City Chiefs,2.5606875,0.0,0.0,0.0,3.2029375,7,Approx,,2.5606875,2,PARTIAL,1,16,0.64225,2,3,0.1,0.75
+LA,Los Angeles Rams,6.2606875,0.0,0.0,0.0,6.110437500000001,1,Inferred counterpart,,6.2606875,2,PARTIAL,1,16,-0.15025,2,3,0.1,0.75
+LAC,Los Angeles Chargers,1.4106875,0.0,0.0,0.0,-0.0893124999999999,16,Verified pair / attribution provisional,,1.4106875,2,PARTIAL,1,16,-1.5,2,3,0.1,0.75
+LV,Las Vegas Raiders,-3.9393125,0.0,0.0,0.0,-2.6568625,24,Verified pair / attribution provisional,,-3.9393125,2,PARTIAL,1,16,1.28245,2,3,0.1,0.75
+MIA,Miami Dolphins,-5.1343125,0.0,0.0,0.0,-6.2385625000000005,32,Verified pair / attribution provisional,,-5.1343125,2,PARTIAL,1,16,-1.10425,2,3,0.1,0.75
+MIN,Minnesota Vikings,1.0256874999999996,0.0,0.0,0.0,2.2135374999999997,10,Verified,,1.0256874999999996,2,PARTIAL,1,16,1.18785,2,3,0.1,0.75
+NE,New England Patriots,3.0356875,0.0,0.0,0.0,3.5143125,5,Verified,,3.0356875,2,PARTIAL,1,16,0.4786250000000001,2,3,0.1,0.75
+NO,New Orleans Saints,-2.3393125,0.0,0.0,0.0,-1.2970125000000001,21,Verified,,-2.3393125,2,PARTIAL,1,16,1.0423,2,3,0.1,0.75
+NYG,New York Giants,-3.589312500000001,0.0,0.0,0.0,-3.625162500000001,26,Verified,,-3.589312500000001,2,PARTIAL,1,16,-0.03584999999999994,2,3,0.1,0.75
+NYJ,New York Jets,-4.6843125,0.0,0.0,0.0,-3.9407125,27,Verified / approx,,-4.6843125,2,PARTIAL,1,16,0.7436,2,3,0.1,0.75
+PHI,Philadelphia Eagles,3.1156875,0.0,0.0,0.0,2.7669875,8,Verified,,3.1156875,2,PARTIAL,1,16,-0.3487,2,3,0.1,0.75
+PIT,Pittsburgh Steelers,-1.4993125000000005,0.0,0.0,0.0,-1.8941125000000005,22,Verified,,-1.4993125000000005,2,PARTIAL,1,16,-0.39480000000000004,2,3,0.1,0.75
+SEA,Seattle Seahawks,3.1606875,0.0,0.0,0.0,3.9457625,3,Verified,,3.1606875,2,PARTIAL,1,16,0.785075,2,3,0.1,0.75
+SF,San Francisco 49ers,1.6606875,0.0,0.0,0.25,3.2324875000000004,6,Verified pair / attribution provisional,"Podcast explicitly carried George Kittle as out for Week 1; he is now traveling and progressing. Bosa was already assumed healthy, so uplift is limited.",1.9106875,2,PARTIAL,1,16,1.3218,2,3,0.1,0.75
+TB,Tampa Bay Buccaneers,-0.5143125000000002,0.0,0.0,0.0,-1.2093125000000002,20,Verified,,-0.5143125000000002,2,PARTIAL,1,16,-0.6950000000000001,2,3,0.1,0.75
+TEN,Tennessee Titans,-4.4393125,0.0,0.0,0.0,-5.1118625,30,Approx,,-4.4393125,2,PARTIAL,1,16,-0.67255,2,3,0.1,0.75
+WAS,Washington Commanders,-1.3193125,0.0,0.0,-0.75,-2.3646625,23,Verified pair / attribution provisional,Post-preview losses of LT Laremy Tunsil and DT Jer'Zhan Newton to IR; most of the charge is the starting left tackle downgrade.,-2.0693125,2,PARTIAL,1,16,-0.2953500000000001,2,3,0.1,0.75
