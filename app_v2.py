@@ -1687,15 +1687,16 @@ with tab6:
             f"{100 * cover_rate:.1f}%" if pd.notna(cover_rate) else "—",
         )
         l4.metric(
-            "Avg Projection vs Close",
+            "Avg Release CLV",
             (
-                f'{graded_picks["projection_vs_close_points"].mean():+.2f} pts'
+                f'{graded_picks["clv_points"].mean():+.2f} pts'
                 if (
-                    "projection_vs_close_points" in graded_picks
-                    and graded_picks["projection_vs_close_points"].notna().any()
+                    "clv_points" in graded_picks
+                    and graded_picks["clv_points"].notna().any()
                 )
                 else "—"
             ),
+            help="Average closing-line value of the model-selected side from the release market line to the captured close. Positive means the release line beat the close.",
         )
 
         tracking_table = pd.DataFrame(
