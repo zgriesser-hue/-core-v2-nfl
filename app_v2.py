@@ -1778,7 +1778,7 @@ with tab7:
     bet_game = st.selectbox("Game", board["matchup"].tolist(), key="bet_game")
     bet_row = board.loc[board["matchup"].eq(bet_game)].iloc[0]
 
-    with st.form("enter_model_bet", clear_on_submit=False):
+    with st.form("enter_model_bet", clear_on_submit=False, enter_to_submit=False):
         bet_team = st.selectbox(
             "Team",
             [str(bet_row["away_team"]), str(bet_row["home_team"])],
@@ -1917,6 +1917,33 @@ with tab7:
             file_name="my_bets.csv",
             mime="text/csv",
         )
+
+        st.divider()
+        st.write("Remove an accidental bet")
+        delete_options = display_bets.sort_values("entered_at_utc", ascending=False).copy()
+        delete_options["delete_label"] = delete_options.apply(
+            lambda row: (
+                f"{display_timestamp(row['entered_at_utc'])} — {row['matchup']} — "
+                f"{row['team']} {format_spread(float(row['bet_spread']))} "
+                f"{format_american(float(row['odds_american']))} — "
+                f"{row['sportsbook']} — USD {float(row['stake']):.2f}"
+            ),
+            axis=1,
+        )
+        delete_lookup = dict(zip(delete_options["delete_label"], delete_options["bet_id"].astype(str)))
+        delete_choice = st.selectbox(
+            "Bet to remove",
+            ["Select a bet…"] + list(delete_lookup),
+            key="delete_bet_choice",
+        )
+        if st.button(
+            "Delete selected bet",
+            disabled=delete_choice == "Select a bet…",
+            key="delete_selected_bet",
+        ):
+            bets = bet_tracking.delete_bet(bets_path, delete_lookup[delete_choice])
+            st.success("Deleted the selected bet.")
+            st.rerun()
 
     st.caption(
         "Actual bet CLV is separate from model-to-close tracking. It compares the exact spread you "
