@@ -75,7 +75,12 @@ def consensus_from_quotes(quotes: pd.DataFrame) -> pd.DataFrame:
         )
         .agg(
             market_home_spread=("home_spread", "median"),
+            market_total=("total_points", "median"),
+            closing_away_moneyline=("away_moneyline_american", "median"),
+            closing_home_moneyline=("home_moneyline_american", "median"),
             consensus_books=("sportsbook", "nunique"),
+            total_consensus_books=("total_points", "count"),
+            moneyline_consensus_books=("away_moneyline_american", "count"),
             snapshot_timestamp_utc=("market_snapshot_timestamp_et", "max"),
         )
     )
@@ -103,7 +108,10 @@ def append_closing_snapshot(
     valid_keys = set(consensus["game_key"])
     captured = captured.loc[captured["game_key"].isin(valid_keys)].copy()
     consensus["kickoff_utc"] = consensus["game_key"].map(kickoff_map)
-    consensus = consensus.rename(columns={"market_home_spread": "closing_home_spread"})
+    consensus = consensus.rename(columns={
+        "market_home_spread": "closing_home_spread",
+        "market_total": "closing_total",
+    })
     consensus["closing_method"] = "MEDIAN_CORE_BOOKS_PREKICK"
 
     books_out = pd.concat([existing_book_lines, captured], ignore_index=True)
@@ -202,13 +210,20 @@ def grade_completed_games(
         "consensus_books",
         "snapshot_timestamp_utc",
     ]
+    optional_closing_columns = [
+        "closing_total", "total_consensus_books",
+        "closing_away_moneyline", "closing_home_moneyline", "moneyline_consensus_books",
+    ]
     if closings.empty:
         closing_data = pd.DataFrame(columns=closing_columns)
     else:
         missing = set(closing_columns) - set(closings.columns)
         if missing:
             raise ValueError(f"Closing history missing columns: {sorted(missing)}")
-        closing_data = closings[closing_columns].copy()
+        available_closing_columns = closing_columns + [
+            col for col in optional_closing_columns if col in closings.columns
+        ]
+        closing_data = closings[available_closing_columns].copy()
     candidates = candidates.merge(
         closing_data.rename(columns={"consensus_books": "closing_consensus_books"}),
         on="game_key",
