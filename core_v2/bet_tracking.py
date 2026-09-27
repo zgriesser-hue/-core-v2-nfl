@@ -21,10 +21,15 @@ def load_bets(path: Path) -> pd.DataFrame:
         if column not in bets:
             bets[column]=pd.NA
     # Backward-compatible migration of the original spread-only ledger.
-    missing_type=bets["bet_type"].isna()
-    bets.loc[missing_type,"bet_type"]="SPREAD"
-    bets.loc[bets["selection"].isna(),"selection"]=bets.loc[bets["selection"].isna(),"team"]
-    bets.loc[bets["bet_line"].isna(),"bet_line"]=bets.loc[bets["bet_line"].isna(),"bet_spread"]
+    # Normalize blank/NaN bet types before returning so Streamlit never sees
+    # a float NaN where it expects a wager-type string.
+    bet_type = bets["bet_type"].astype("string").str.strip().str.upper()
+    bets["bet_type"] = bet_type.mask(bet_type.isna() | bet_type.eq(""), "SPREAD")
+    missing_selection = bets["selection"].isna() | bets["selection"].astype("string").str.strip().eq("")
+    bets.loc[missing_selection,"selection"]=bets.loc[missing_selection,"team"]
+    spread_rows=bets["bet_type"].eq("SPREAD")
+    missing_line=bets["bet_line"].isna()
+    bets.loc[spread_rows & missing_line,"bet_line"]=bets.loc[spread_rows & missing_line,"bet_spread"]
     return bets[BET_COLUMNS].copy()
 
 def make_bet_id(season:int,week:int,game_id:str,selection:str,entered_at_utc:str)->str:
