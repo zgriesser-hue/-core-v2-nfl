@@ -175,6 +175,7 @@ def parse_market_payload(
                 "observed_timestamp_et": book_update,
                 "spread_observed_timestamp_et": None,
                 "total_observed_timestamp_et": None,
+                "moneyline_observed_timestamp_et": None,
                 "away_spread": np.nan,
                 "away_price_american": np.nan,
                 "home_spread": np.nan,
@@ -182,6 +183,8 @@ def parse_market_payload(
                 "total_points": np.nan,
                 "over_price_american": np.nan,
                 "under_price_american": np.nan,
+                "away_moneyline_american": np.nan,
+                "home_moneyline_american": np.nan,
                 "book_topped_up_clean": clean_bool(book.get("topped_up")),
             }
 
@@ -279,7 +282,32 @@ def parse_market_payload(
                         }
                     )
 
-            if pd.notna(row["away_spread"]) or pd.notna(row["total_points"]):
+                elif market_name in {"h2h", "moneyline", "moneylines"}:
+                    by_team = {
+                        normalize_market_team(outcome.get("name") or outcome.get("team")): outcome
+                        for outcome in outcomes
+                    }
+                    away_outcome = by_team.get(away)
+                    home_outcome = by_team.get(home)
+                    if away_outcome is None or home_outcome is None:
+                        continue
+                    away_decimal = pd.to_numeric(away_outcome.get("price"), errors="coerce")
+                    home_decimal = pd.to_numeric(home_outcome.get("price"), errors="coerce")
+                    if pd.isna(away_decimal) or pd.isna(home_decimal):
+                        continue
+                    row.update(
+                        {
+                            "moneyline_observed_timestamp_et": observed,
+                            "away_moneyline_american": decimal_to_american(away_decimal),
+                            "home_moneyline_american": decimal_to_american(home_decimal),
+                        }
+                    )
+
+            if (
+                pd.notna(row["away_spread"])
+                or pd.notna(row["total_points"])
+                or pd.notna(row["away_moneyline_american"])
+            ):
                 rows.append(row)
 
     quotes = pd.DataFrame(rows)
@@ -298,7 +326,7 @@ def request_spreads(api_key: str, timeout: int = 30) -> tuple[object, dict]:
 
 def request_markets(
     api_key: str,
-    markets: tuple[str, ...] = ("spreads", "totals"),
+    markets: tuple[str, ...] = ("spreads", "totals", "h2h"),
     timeout: int = 30,
 ) -> tuple[object, dict]:
     response = requests.get(
