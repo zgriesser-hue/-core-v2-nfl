@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from core_v2.io import atomic_write_csv
-from core_v2.market import parse_spread_payload, request_spreads
+from core_v2.market import parse_market_payload, request_markets
 from core_v2.tracking import append_closing_snapshot, due_closing_games, schedule_with_kickoffs
 
 
@@ -54,9 +54,9 @@ def main() -> None:
         api_key = os.environ.get("PARLAY_API_KEY", "").strip()
         if not api_key:
             raise RuntimeError("PARLAY_API_KEY is required when games are due")
-        payload, metadata = request_spreads(api_key)
+        payload, metadata = request_markets(api_key, markets=("spreads", "totals", "h2h"))
     snapshot = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    quotes = parse_spread_payload(
+    quotes = parse_market_payload(
         payload, args.season, args.week, set(due["game_key"]), snapshot
     )
     books, consensus = append_closing_snapshot(
