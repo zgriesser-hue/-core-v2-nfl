@@ -84,7 +84,10 @@ def grade_bets_against_closes(bets:pd.DataFrame,game_grades:pd.DataFrame)->pd.Da
     grades=game_grades.copy()
     grades["matchup"]=grades["away_team"].astype(str)+" @ "+grades["home_team"].astype(str)
     keys=["season","week","matchup"]
-    merged=out.merge(grades[keys+["away_team","home_team","closing_home_spread","closing_status","away_score","home_score"]],on=keys,how="left")
+    merged=out.merge(grades[keys+[col for col in [
+            "away_team","home_team","closing_home_spread","closing_status","away_score","home_score",
+            "closing_total","closing_away_moneyline","closing_home_moneyline"
+        ] if col in grades.columns]],on=keys,how="left")
 
     def grade_row(row):
         away_score,home_score=row.get("away_score"),row.get("home_score")
@@ -99,6 +102,15 @@ def grade_bets_against_closes(bets:pd.DataFrame,game_grades:pd.DataFrame)->pd.Da
             else:
                 winner=str(row["home_team"]) if float(home_score)>float(away_score) else str(row["away_team"])
                 result="Win" if selection==winner else "Loss"
+            close_col = "closing_home_moneyline" if selection==str(row["home_team"]) else "closing_away_moneyline"
+            if pd.notna(row.get(close_col)):
+                close=float(row[close_col])
+                def implied(american):
+                    american=float(american)
+                    return 100.0/(american+100.0) if american>0 else abs(american)/(abs(american)+100.0)
+                # Positive percentage points means the entered price implied a lower
+                # break-even probability than the closing market price.
+                clv=(implied(close)-implied(odds))*100.0
         elif typ=="TOTAL":
             line=pd.to_numeric(pd.Series([row.get("bet_line")]),errors="coerce").iloc[0]
             if pd.isna(line): return pd.Series([pd.NA,pd.NA,pd.NA,pd.NA])
@@ -106,6 +118,9 @@ def grade_bets_against_closes(bets:pd.DataFrame,game_grades:pd.DataFrame)->pd.Da
             if abs(diff)<1e-9: result="Push"
             elif selection.upper()=="OVER": result="Win" if diff>0 else "Loss"
             else: result="Win" if diff<0 else "Loss"
+            if pd.notna(row.get("closing_total")):
+                close=float(row["closing_total"])
+                clv=(close-float(line)) if selection.upper()=="OVER" else (float(line)-close)
         else:
             if row.get("closing_status")=="CAPTURED" and pd.notna(row.get("closing_home_spread")):
                 home_close=float(row["closing_home_spread"])
