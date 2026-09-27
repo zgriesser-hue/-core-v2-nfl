@@ -2,164 +2,137 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-
 import pandas as pd
 
-
 BET_COLUMNS = [
-    "bet_id", "season", "week", "game_id", "matchup", "team", "bet_spread",
-    "odds_american", "sportsbook", "stake", "entered_at_utc",
-    "model_fair_home_spread_at_entry", "market_home_spread_at_entry",
-    "model_side_at_entry", "model_edge_points_at_entry",
-    "model_selected_team_spread_at_entry", "bet_vs_model_points", "bet_alignment",
-    "status", "notes",
+    "bet_id","season","week","game_id","matchup","bet_type","selection","team",
+    "bet_line","bet_spread","odds_american","sportsbook","stake","entered_at_utc",
+    "model_fair_home_spread_at_entry","market_home_spread_at_entry",
+    "market_total_at_entry","model_side_at_entry","model_edge_points_at_entry",
+    "model_selected_team_spread_at_entry","bet_vs_model_points","bet_alignment",
+    "status","notes",
 ]
-
 
 def load_bets(path: Path) -> pd.DataFrame:
     if not path.exists():
         return pd.DataFrame(columns=BET_COLUMNS)
-    bets = pd.read_csv(path)
+    bets=pd.read_csv(path)
     for column in BET_COLUMNS:
         if column not in bets:
-            bets[column] = pd.NA
+            bets[column]=pd.NA
+    # Backward-compatible migration of the original spread-only ledger.
+    missing_type=bets["bet_type"].isna()
+    bets.loc[missing_type,"bet_type"]="SPREAD"
+    bets.loc[bets["selection"].isna(),"selection"]=bets.loc[bets["selection"].isna(),"team"]
+    bets.loc[bets["bet_line"].isna(),"bet_line"]=bets.loc[bets["bet_line"].isna(),"bet_spread"]
     return bets[BET_COLUMNS].copy()
 
+def make_bet_id(season:int,week:int,game_id:str,selection:str,entered_at_utc:str)->str:
+    stamp=pd.Timestamp(entered_at_utc).strftime("%Y%m%dT%H%M%S%f")
+    return f"{int(season)}-{int(week):02d}-{game_id}-{selection}-{stamp}"
 
-def make_bet_id(season: int, week: int, game_id: str, team: str, entered_at_utc: str) -> str:
-    stamp = pd.Timestamp(entered_at_utc).strftime("%Y%m%dT%H%M%S")
-    return f"{int(season)}-{int(week):02d}-{game_id}-{team}-{stamp}"
-
-
-def append_bet(path: Path, record: dict) -> pd.DataFrame:
-    bets = load_bets(path)
-    row = {column: record.get(column, pd.NA) for column in BET_COLUMNS}
+def append_bet(path:Path,record:dict)->pd.DataFrame:
+    bets=load_bets(path)
+    row={column:record.get(column,pd.NA) for column in BET_COLUMNS}
     if pd.isna(row["entered_at_utc"]):
-        row["entered_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        row["entered_at_utc"]=datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    if pd.isna(row["bet_type"]): row["bet_type"]="SPREAD"
+    if pd.isna(row["selection"]): row["selection"]=row["team"]
+    if pd.isna(row["bet_line"]) and row["bet_type"]=="SPREAD": row["bet_line"]=row["bet_spread"]
     if pd.isna(row["bet_id"]):
-        row["bet_id"] = make_bet_id(
-            int(row["season"]), int(row["week"]), str(row["game_id"]),
-            str(row["team"]), str(row["entered_at_utc"]),
-        )
-    duplicate_fields = ["season", "week", "game_id", "team", "bet_spread", "odds_american", "sportsbook", "stake"]
+        row["bet_id"]=make_bet_id(int(row["season"]),int(row["week"]),str(row["game_id"]),str(row["selection"]),str(row["entered_at_utc"]))
+    duplicate_fields=["season","week","game_id","bet_type","selection","bet_line","odds_american","sportsbook","stake"]
     if not bets.empty:
-        duplicate = pd.Series(True, index=bets.index)
+        duplicate=pd.Series(True,index=bets.index)
         for field in duplicate_fields:
-            duplicate &= bets[field].astype(str).str.strip().str.lower().eq(
-                str(row[field]).strip().lower()
-            )
-        if duplicate.any():
-            return bets
-
-    updated = pd.concat([bets, pd.DataFrame([row])], ignore_index=True)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    updated.to_csv(path, index=False)
+            duplicate &= bets[field].astype(str).str.strip().str.lower().eq(str(row[field]).strip().lower())
+        if duplicate.any(): return bets
+    updated=pd.concat([bets,pd.DataFrame([row])],ignore_index=True)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    updated.to_csv(path,index=False)
     return updated
 
+def delete_bet(path:Path,bet_id:str)->pd.DataFrame:
+    bets=load_bets(path)
+    updated=bets.loc[~bets["bet_id"].astype(str).eq(str(bet_id))].copy()
+    path.parent.mkdir(parents=True,exist_ok=True); updated.to_csv(path,index=False)
+    return updated
 
-def american_profit(stake: float, odds: float) -> float:
-    stake, odds = float(stake), float(odds)
-    return stake * (100.0 / abs(odds)) if odds < 0 else stake * (odds / 100.0)
+def american_profit(stake:float,odds:float)->float:
+    stake,odds=float(stake),float(odds)
+    return stake*(100.0/abs(odds)) if odds<0 else stake*(odds/100.0)
 
-
-def selected_team_close(row: pd.Series, closing_home_spread: float) -> float:
-    if pd.isna(closing_home_spread):
-        return float("nan")
-    if str(row["team"]) == str(row.get("home_team")):
-        return float(closing_home_spread)
-    return -float(closing_home_spread)
-
-
-def selected_team_model_spread(team: str, away_team: str, home_team: str, fair_home_spread: float) -> float:
-    """Convert the home-team fair spread to the selected team's spread."""
-    fair_home_spread = float(fair_home_spread)
-    if str(team) == str(home_team):
-        return fair_home_spread
-    if str(team) == str(away_team):
-        return -fair_home_spread
+def selected_team_model_spread(team:str,away_team:str,home_team:str,fair_home_spread:float)->float:
+    if str(team)==str(home_team): return float(fair_home_spread)
+    if str(team)==str(away_team): return -float(fair_home_spread)
     raise ValueError(f"Bet team {team} is not in {away_team} @ {home_team}")
 
+def classify_bet_alignment(bet_spread:float,selected_team_model_spread_value:float,neutral_tolerance:float=.25)->tuple[float,str]:
+    points=float(bet_spread)-float(selected_team_model_spread_value)
+    return points,("WITH_MODEL" if points>neutral_tolerance else "AGAINST_MODEL" if points<-neutral_tolerance else "NEUTRAL")
 
-def classify_bet_alignment(
-    bet_spread: float,
-    selected_team_model_spread_value: float,
-    neutral_tolerance: float = 0.25,
-) -> tuple[float, str]:
-    """Positive points means the bettor got a better spread than Core V2 fair.
+def grade_bets_against_closes(bets:pd.DataFrame,game_grades:pd.DataFrame)->pd.DataFrame:
+    """Grade SPREAD, MONEYLINE and TOTAL wagers. Spread CLV is retained.
 
-    This is price alignment, not a claim that the model explicitly selected the
-    opposite team. A small difference is labeled NEUTRAL.
+    Moneyline and total result/P&L need only final scores. Their CLV remains blank
+    until dedicated closing ML/total snapshots are persisted.
     """
-    points = float(bet_spread) - float(selected_team_model_spread_value)
-    if points > neutral_tolerance:
-        alignment = "WITH_MODEL"
-    elif points < -neutral_tolerance:
-        alignment = "AGAINST_MODEL"
-    else:
-        alignment = "NEUTRAL"
-    return points, alignment
-
-
-def grade_bets_against_closes(bets: pd.DataFrame, game_grades: pd.DataFrame) -> pd.DataFrame:
-    """Attach actual-wager closing spread, CLV, ATS result, and P/L.
-
-    CLV is always from the bettor's perspective:
-        bet_spread - closing_selected_team_spread
-    Positive CLV means the bettor beat the close.
-    """
-    out = bets.copy()
-    for column in ["closing_selected_team_spread", "actual_bet_clv_points", "actual_bet_result", "profit_loss"]:
-        out[column] = pd.NA
-    if out.empty or game_grades.empty:
-        return out
-
-    grades = game_grades.copy()
-    grades["matchup"] = grades["away_team"].astype(str) + " @ " + grades["home_team"].astype(str)
-    keys = ["season", "week", "matchup"]
-    merged = out.merge(
-        grades[keys + ["away_team", "home_team", "closing_home_spread", "closing_status", "away_score", "home_score"]],
-        on=keys,
-        how="left",
-    )
+    out=bets.copy()
+    for c in ["closing_selected_team_spread","actual_bet_clv_points","actual_bet_result","profit_loss"]:
+        out[c]=pd.NA
+    if out.empty or game_grades.empty: return out
+    grades=game_grades.copy()
+    grades["matchup"]=grades["away_team"].astype(str)+" @ "+grades["home_team"].astype(str)
+    keys=["season","week","matchup"]
+    merged=out.merge(grades[keys+["away_team","home_team","closing_home_spread","closing_status","away_score","home_score"]],on=keys,how="left")
 
     def grade_row(row):
-        if row.get("closing_status") != "CAPTURED" or pd.isna(row.get("closing_home_spread")):
-            return pd.Series([pd.NA, pd.NA, pd.NA, pd.NA])
-
-        close = float(row["closing_home_spread"])
-        if str(row["team"]) == str(row["home_team"]):
-            selected_close = close
-            team_score, opp_score = row.get("home_score"), row.get("away_score")
-        elif str(row["team"]) == str(row["away_team"]):
-            selected_close = -close
-            team_score, opp_score = row.get("away_score"), row.get("home_score")
-        else:
-            return pd.Series([pd.NA, pd.NA, pd.NA, pd.NA])
-
-        clv = float(row["bet_spread"]) - selected_close
-        result = pd.NA
-        pnl = pd.NA
-        if pd.notna(team_score) and pd.notna(opp_score):
-            ats_margin = float(team_score) - float(opp_score) + float(row["bet_spread"])
-            if ats_margin > 0:
-                result = "Win"
-                pnl = american_profit(float(row["stake"]), float(row["odds_american"]))
-            elif ats_margin < 0:
-                result = "Loss"
-                pnl = -float(row["stake"])
+        away_score,home_score=row.get("away_score"),row.get("home_score")
+        if pd.isna(away_score) or pd.isna(home_score):
+            return pd.Series([pd.NA,pd.NA,pd.NA,pd.NA])
+        typ=str(row.get("bet_type","SPREAD")).upper()
+        selection=str(row.get("selection",row.get("team","")))
+        stake=float(row["stake"]); odds=float(row["odds_american"])
+        close=pd.NA; clv=pd.NA
+        if typ=="MONEYLINE":
+            if float(home_score)==float(away_score): result="Push"
             else:
-                result = "Push"
-                pnl = 0.0
-        return pd.Series([selected_close, clv, result, pnl])
+                winner=str(row["home_team"]) if float(home_score)>float(away_score) else str(row["away_team"])
+                result="Win" if selection==winner else "Loss"
+        elif typ=="TOTAL":
+            line=pd.to_numeric(pd.Series([row.get("bet_line")]),errors="coerce").iloc[0]
+            if pd.isna(line): return pd.Series([pd.NA,pd.NA,pd.NA,pd.NA])
+            diff=float(home_score)+float(away_score)-float(line)
+            if abs(diff)<1e-9: result="Push"
+            elif selection.upper()=="OVER": result="Win" if diff>0 else "Loss"
+            else: result="Win" if diff<0 else "Loss"
+        else:
+            if row.get("closing_status")=="CAPTURED" and pd.notna(row.get("closing_home_spread")):
+                home_close=float(row["closing_home_spread"])
+                close=home_close if selection==str(row["home_team"]) else -home_close
+                clv=float(row["bet_line"])-float(close)
+            if selection==str(row["home_team"]):
+                team_score,opp_score=float(home_score),float(away_score)
+            else:
+                team_score,opp_score=float(away_score),float(home_score)
+            ats=team_score-opp_score+float(row["bet_line"])
+            result="Win" if ats>0 else "Loss" if ats<0 else "Push"
+        pnl=american_profit(stake,odds) if result=="Win" else -stake if result=="Loss" else 0.0
+        return pd.Series([close,clv,result,pnl])
 
-    merged[["closing_selected_team_spread", "actual_bet_clv_points", "actual_bet_result", "profit_loss"]] = merged.apply(grade_row, axis=1)
+    merged[["closing_selected_team_spread","actual_bet_clv_points","actual_bet_result","profit_loss"]]=merged.apply(grade_row,axis=1)
     return merged
 
-
-def delete_bet(path: Path, bet_id: str) -> pd.DataFrame:
-    """Delete one explicitly selected wager from the local ledger."""
-    bets = load_bets(path)
-    updated = bets.loc[~bets["bet_id"].astype(str).eq(str(bet_id))].copy()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    updated.to_csv(path, index=False)
-    return updated
+def summarize_bets(graded:pd.DataFrame)->pd.DataFrame:
+    """Record, stake, P/L and ROI by bet type plus OVERALL."""
+    if graded.empty:
+        return pd.DataFrame(columns=["bet_type","bets","wins","losses","pushes","stake","profit_loss","roi"])
+    g=graded.copy()
+    g["stake_num"]=pd.to_numeric(g["stake"],errors="coerce").fillna(0.0)
+    g["pnl_num"]=pd.to_numeric(g["profit_loss"],errors="coerce")
+    rows=[]
+    for label,frame in [("OVERALL",g)]+list(g.groupby("bet_type",dropna=False)):
+        graded_rows=frame[frame["actual_bet_result"].isin(["Win","Loss","Push"])]
+        stake=float(graded_rows["stake_num"].sum()); pnl=float(graded_rows["pnl_num"].fillna(0).sum())
+        rows.append({"bet_type":label,"bets":len(graded_rows),"wins":int((graded_rows["actual_bet_result"]=="Win").sum()),"losses":int((graded_rows["actual_bet_result"]=="Loss").sum()),"pushes":int((graded_rows["actual_bet_result"]=="Push").sum()),"stake":stake,"profit_loss":pnl,"roi":(pnl/stake if stake else float("nan"))})
+    return pd.DataFrame(rows)
