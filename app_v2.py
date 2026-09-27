@@ -1,5 +1,7 @@
 
 import time
+import base64
+import requests
 from io import BytesIO
 
 CORE_V2_LINE_MOVEMENT_V1 = True
@@ -29,6 +31,39 @@ st.set_page_config(
 
 
 ROOT = Path(__file__).parent
+
+BET_LEDGER_REPO = "zgriesser-hue/-core-v2-nfl"
+BET_LEDGER_PATH = "data/tracking/my_bets.csv"
+
+def persist_bets_to_github(bets: pd.DataFrame) -> tuple[bool, str]:
+    """Persist the ledger to GitHub so Streamlit container restarts cannot erase bets."""
+    token = str(st.secrets.get("BET_LEDGER_GITHUB_TOKEN", "")).strip()
+    if not token:
+        return False, "BET_LEDGER_GITHUB_TOKEN is not configured in Streamlit Secrets."
+    api = f"https://api.github.com/repos/{BET_LEDGER_REPO}/contents/{BET_LEDGER_PATH}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    current = requests.get(api, headers=headers, timeout=20)
+    current.raise_for_status()
+    sha = current.json()["sha"]
+    encoded = base64.b64encode(bets.to_csv(index=False).encode("utf-8")).decode("ascii")
+    response = requests.put(
+        api,
+        headers=headers,
+        json={
+            "message": "data: update bet ledger from Streamlit",
+            "content": encoded,
+            "sha": sha,
+            "branch": "main",
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    return True, "Saved permanently to GitHub."
+
 
 
 def locate_file(filename):
@@ -1835,7 +1870,11 @@ with tab7:
                     st.warning("That exact wager is already in the ledger; no duplicate was added.")
                 else:
                     line_text = "" if bet_type == "MONEYLINE" else f" {float(bet_line):+.1f}"
-                    st.success(f"Saved {selection}{line_text} {format_american(int(bet_odds))} at {sportsbook.strip()}.")
+                    permanent, message = persist_bets_to_github(bets)
+                    if permanent:
+                        st.success(f"Saved {selection}{line_text} {format_american(int(bet_odds))} at {sportsbook.strip()} — permanent GitHub ledger updated.")
+                    else:
+                        st.error(f"Bet saved only to this Streamlit session. {message}")
             except OSError:
                 st.error("This deployment could not write the ledger.")
 
@@ -1883,9 +1922,13 @@ with tab7:
         delete_lookup=dict(zip(delete_options["delete_label"],delete_options["bet_id"].astype(str)))
         delete_choice=st.selectbox("Bet to remove",["Select a bet…"]+list(delete_lookup),key="delete_bet_choice")
         if st.button("Delete selected bet",disabled=delete_choice=="Select a bet…",key="delete_selected_bet"):
-            bet_tracking.delete_bet(bets_path,delete_lookup[delete_choice])
-            st.success("Deleted the selected bet.")
-            st.rerun()
+            updated_bets = bet_tracking.delete_bet(bets_path,delete_lookup[delete_choice])
+            permanent, message = persist_bets_to_github(updated_bets)
+            if permanent:
+                st.success("Deleted the selected bet from the permanent ledger.")
+                st.rerun()
+            else:
+                st.error(f"Deleted only from this Streamlit session. {message}")
 
 with tab8:
     st.subheader("Bet Breakdown")
