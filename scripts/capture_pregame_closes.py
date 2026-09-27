@@ -66,7 +66,7 @@ def main() -> None:
     if not api_key:
         raise RuntimeError("PARLAY_API_KEY secret is missing or empty")
 
-    payload, metadata = request_markets(api_key, markets=("spreads", "totals"))
+    payload, metadata = request_markets(api_key, markets=("spreads", "totals", "h2h"))
     snapshot = capture_now.isoformat(timespec="seconds")
     due["_game_key"] = due.apply(
         lambda r: f"{int(r['season'])}_W{int(r['week'])}_{r['away_team']}_{r['home_team']}",
