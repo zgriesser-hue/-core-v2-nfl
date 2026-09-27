@@ -800,7 +800,7 @@ st.sidebar.caption(
 # Tabs
 # --------------------------------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
     [
         "Market Board",
         "Game Detail",
@@ -809,6 +809,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
         "Power Ratings",
         "Model Performance",
         "My Bets",
+        "Bet Breakdown",
     ]
 )
 
@@ -1763,190 +1764,162 @@ with tab6:
 
 with tab7:
     st.subheader("My Bets")
-    st.caption(
-        "Record actual Core V2 spread bets here. New entries snapshot the model fair line "
-        "and market consensus currently displayed in the app; later model refreshes do not "
-        "rewrite that decision-time snapshot."
-    )
+    st.caption("Track spreads, moneylines, and game totals. Pressing Enter does not save; use Save bet.")
 
     bets_path = ROOT / "data" / "tracking" / "my_bets.csv"
     bets = bet_tracking.load_bets(bets_path)
-
-    # Keep the matchup selector outside the form. Streamlit forms batch widget
-    # changes until submit, so a dependent Team selectbox inside the same form
-    # cannot refresh immediately when Game changes.
     bet_game = st.selectbox("Game", board["matchup"].tolist(), key="bet_game")
     bet_row = board.loc[board["matchup"].eq(bet_game)].iloc[0]
+    bet_type = st.segmented_control(
+        "Bet type", ["SPREAD", "MONEYLINE", "TOTAL"], default="SPREAD", key="bet_type"
+    )
 
     with st.form("enter_model_bet", clear_on_submit=False, enter_to_submit=False):
-        bet_team = st.selectbox(
-            "Team",
-            [str(bet_row["away_team"]), str(bet_row["home_team"])],
-            key=f"bet_team_{bet_game}",
-        )
-        b1, b2, b3 = st.columns(3)
-        bet_spread = b1.number_input("Spread", value=0.0, step=0.5, format="%.1f")
-        bet_odds = b2.number_input("American odds", value=-110, step=1)
-        bet_stake = b3.number_input("Stake ($)", min_value=0.0, value=25.0, step=5.0)
+        if bet_type == "TOTAL":
+            selection = st.selectbox("Side", ["OVER", "UNDER"])
+            default_line = float(bet_row["market_total"]) if pd.notna(bet_row.get("market_total")) else 0.0
+            bet_line = st.number_input("Total", value=default_line, step=0.5, format="%.1f")
+            bet_team = ""
+        else:
+            bet_team = st.selectbox("Team", [str(bet_row["away_team"]), str(bet_row["home_team"])])
+            selection = bet_team
+            if bet_type == "SPREAD":
+                if bet_team == str(bet_row["home_team"]):
+                    default_line = float(bet_row["market_home_spread"])
+                else:
+                    default_line = -float(bet_row["market_home_spread"])
+                bet_line = st.number_input("Spread", value=default_line, step=0.5, format="%.1f")
+            else:
+                bet_line = pd.NA
+
+        b1, b2 = st.columns(2)
+        bet_odds = b1.number_input("American odds", value=-110, step=1)
+        bet_stake = b2.number_input("Stake ($)", min_value=0.0, value=25.0, step=5.0)
         sportsbook = st.text_input("Sportsbook", value="bet365")
         notes = st.text_input("Notes", value="")
         submitted = st.form_submit_button("Save bet")
 
         if submitted:
             entered_at = pd.Timestamp.now(tz="UTC").isoformat()
-            try:
-                game_id_value = str(
-                    bet_row.get(
-                        "game_id",
-                        f"{active_season}_{active_week:02d}_{bet_row['away_team']}_{bet_row['home_team']}",
-                    )
-                )
+            game_id_value = str(bet_row.get("game_id", f"{active_season}_{active_week:02d}_{bet_row['away_team']}_{bet_row['home_team']}"))
+            selected_model_spread = pd.NA
+            bet_vs_model_points = pd.NA
+            bet_alignment = pd.NA
+            if bet_type == "SPREAD":
                 selected_model_spread = bet_tracking.selected_team_model_spread(
-                    bet_team,
-                    str(bet_row["away_team"]),
-                    str(bet_row["home_team"]),
-                    float(bet_row["fair_home_spread"]),
+                    bet_team, str(bet_row["away_team"]), str(bet_row["home_team"]), float(bet_row["fair_home_spread"])
                 )
-                bet_vs_model_points, bet_alignment = bet_tracking.classify_bet_alignment(
-                    float(bet_spread),
-                    selected_model_spread,
-                )
+                bet_vs_model_points, bet_alignment = bet_tracking.classify_bet_alignment(float(bet_line), selected_model_spread)
+            try:
+                before = len(bets)
                 bets = bet_tracking.append_bet(
                     bets_path,
                     {
-                        "season": int(active_season),
-                        "week": int(active_week),
-                        "game_id": game_id_value,
-                        "matchup": bet_game,
-                        "team": bet_team,
-                        "bet_spread": float(bet_spread),
-                        "odds_american": int(bet_odds),
-                        "sportsbook": sportsbook.strip(),
-                        "stake": float(bet_stake),
+                        "season": int(active_season), "week": int(active_week), "game_id": game_id_value,
+                        "matchup": bet_game, "bet_type": bet_type, "selection": selection,
+                        "team": bet_team if bet_type != "TOTAL" else pd.NA,
+                        "bet_line": bet_line, "bet_spread": bet_line if bet_type == "SPREAD" else pd.NA,
+                        "odds_american": int(bet_odds), "sportsbook": sportsbook.strip(), "stake": float(bet_stake),
                         "entered_at_utc": entered_at,
                         "model_fair_home_spread_at_entry": float(bet_row["fair_home_spread"]),
                         "market_home_spread_at_entry": float(bet_row["market_home_spread"]) if pd.notna(bet_row["market_home_spread"]) else pd.NA,
+                        "market_total_at_entry": float(bet_row["market_total"]) if pd.notna(bet_row.get("market_total")) else pd.NA,
                         "model_side_at_entry": str(bet_row.get("model_side", "")),
                         "model_edge_points_at_entry": float(bet_row["edge_points"]) if pd.notna(bet_row["edge_points"]) else pd.NA,
                         "model_selected_team_spread_at_entry": selected_model_spread,
-                        "bet_vs_model_points": bet_vs_model_points,
-                        "bet_alignment": bet_alignment,
-                        "status": "OPEN",
-                        "notes": notes.strip(),
+                        "bet_vs_model_points": bet_vs_model_points, "bet_alignment": bet_alignment,
+                        "status": "OPEN", "notes": notes.strip(),
                     },
                 )
-                st.success(
-                    f"Saved {bet_team} {format_spread(float(bet_spread))} "
-                    f"{format_american(int(bet_odds))} at {sportsbook.strip()}."
-                )
+                if len(bets) == before:
+                    st.warning("That exact wager is already in the ledger; no duplicate was added.")
+                else:
+                    line_text = "" if bet_type == "MONEYLINE" else f" {float(bet_line):+.1f}"
+                    st.success(f"Saved {selection}{line_text} {format_american(int(bet_odds))} at {sportsbook.strip()}.")
             except OSError:
-                st.error(
-                    "This deployment cannot write persistent files. Download the ledger below "
-                    "and commit it to data/tracking/my_bets.csv, or enter the bet from a writable deployment."
-                )
+                st.error("This deployment could not write the ledger.")
 
     if bets.empty:
-        st.info("No model bets recorded yet.")
+        st.info("No bets recorded yet.")
     else:
         display_bets = bet_tracking.grade_bets_against_closes(bets, game_grades)
-        display_bets["Bet"] = display_bets.apply(
-            lambda row: f"{row['team']} {format_spread(float(row['bet_spread']))} "
-            f"{format_american(float(row['odds_american']))}",
-            axis=1,
-        )
-        display_bets["Stake"] = pd.to_numeric(display_bets["stake"], errors="coerce").map(
-            lambda value: f"USD {value:.2f}" if pd.notna(value) else "—"
-        )
+
+        def bet_label(row):
+            typ=str(row["bet_type"]).upper()
+            if typ=="MONEYLINE":
+                return f"{row['selection']} ML {format_american(float(row['odds_american']))}"
+            if typ=="TOTAL":
+                return f"{str(row['selection']).title()} {float(row['bet_line']):.1f} {format_american(float(row['odds_american']))}"
+            return f"{row['selection']} {format_spread(float(row['bet_line']))} {format_american(float(row['odds_american']))}"
+
+        display_bets["Bet"] = display_bets.apply(bet_label, axis=1)
+        display_bets["Stake"] = pd.to_numeric(display_bets["stake"],errors="coerce").map(lambda x:f"USD {x:.2f}")
         display_bets["Entered"] = display_bets["entered_at_utc"].map(display_timestamp)
-        display_bets["Model at entry"] = display_bets["model_fair_home_spread_at_entry"].map(
-            lambda value: f"{float(value):+.2f}" if pd.notna(value) else "Legacy / unavailable"
-        )
-        display_bets["Market at entry"] = display_bets["market_home_spread_at_entry"].map(
-            lambda value: f"{float(value):+.1f}" if pd.notna(value) else "Legacy / unavailable"
-        )
-        display_bets["Core V2 bet-side fair"] = pd.to_numeric(
-            display_bets["model_selected_team_spread_at_entry"], errors="coerce"
-        ).map(lambda value: format_spread(value) if pd.notna(value) else "—")
-        display_bets["Vs model"] = pd.to_numeric(
-            display_bets["bet_vs_model_points"], errors="coerce"
-        ).map(lambda value: f"{value:+.2f} pts" if pd.notna(value) else "—")
-        display_bets["Alignment"] = display_bets["bet_alignment"].map(
-            {"WITH_MODEL": "With model", "AGAINST_MODEL": "Against model", "NEUTRAL": "Neutral"}
-        ).fillna("—")
-        display_bets["Close"] = pd.to_numeric(
-            display_bets["closing_selected_team_spread"], errors="coerce"
-        ).map(lambda value: format_spread(value) if pd.notna(value) else "Pending")
-        display_bets["Actual bet CLV"] = pd.to_numeric(
-            display_bets["actual_bet_clv_points"], errors="coerce"
-        ).map(lambda value: f"{value:+.1f} pts" if pd.notna(value) else "Pending")
         display_bets["Result"] = display_bets["actual_bet_result"].fillna("Pending")
-        display_bets["P/L"] = pd.to_numeric(
-            display_bets["profit_loss"], errors="coerce"
-        ).map(lambda value: f"USD {value:+.2f}" if pd.notna(value) else "Pending")
+        display_bets["P/L"] = pd.to_numeric(display_bets["profit_loss"],errors="coerce").map(lambda x:f"USD {x:+.2f}" if pd.notna(x) else "Pending")
         st.dataframe(
-            display_bets[
-                ["week", "matchup", "Bet", "sportsbook", "Stake", "Entered",
-                 "Core V2 bet-side fair", "Vs model", "Alignment",
-                 "Close", "Actual bet CLV", "Result", "P/L",
-                 "Model at entry", "Market at entry", "status"]
-            ].rename(
-                columns={
-                    "week": "Week", "matchup": "Matchup", "sportsbook": "Book",
-                    "status": "Status",
-                }
-            ).sort_values(["Week", "Entered"], ascending=[False, False]),
-            use_container_width=True,
-            hide_index=True,
+            display_bets[["week","matchup","bet_type","Bet","sportsbook","Stake","Entered","Result","P/L","status"]]
+            .rename(columns={"week":"Week","matchup":"Matchup","bet_type":"Type","sportsbook":"Book","status":"Status"})
+            .sort_values(["Week","Entered"],ascending=[False,False]),
+            use_container_width=True, hide_index=True,
         )
 
-        total_staked = pd.to_numeric(bets["stake"], errors="coerce").sum()
-        graded_actual = display_bets.loc[display_bets["actual_bet_result"].isin(["Win", "Loss", "Push"])].copy()
-        actual_wins = int(graded_actual["actual_bet_result"].eq("Win").sum())
-        actual_losses = int(graded_actual["actual_bet_result"].eq("Loss").sum())
-        actual_pushes = int(graded_actual["actual_bet_result"].eq("Push").sum())
-        clv_rows = pd.to_numeric(display_bets["actual_bet_clv_points"], errors="coerce").dropna()
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Tracked stake", f"USD {total_staked:.2f}")
-        m2.metric("Actual bet record", f"{actual_wins}-{actual_losses}-{actual_pushes}")
-        m3.metric("Avg actual bet CLV", f"{clv_rows.mean():+.2f} pts" if not clv_rows.empty else "Pending")
-        total_pnl = pd.to_numeric(graded_actual["profit_loss"], errors="coerce").sum()
-        m4.metric("Actual bet P/L", f"USD {total_pnl:+.2f}" if not graded_actual.empty else "Pending")
-        st.download_button(
-            "Download bet ledger CSV",
-            data=bets.to_csv(index=False).encode("utf-8"),
-            file_name="my_bets.csv",
-            mime="text/csv",
-        )
+        summary = bet_tracking.summarize_bets(display_bets)
+        overall = summary.loc[summary["bet_type"].eq("OVERALL")].iloc[0]
+        m1,m2,m3,m4 = st.columns(4)
+        m1.metric("Overall record", f"{int(overall['wins'])}-{int(overall['losses'])}-{int(overall['pushes'])}")
+        m2.metric("Graded stake", f"USD {overall['stake']:.2f}")
+        m3.metric("Gain / loss", f"USD {overall['profit_loss']:+.2f}")
+        m4.metric("ROI", f"{overall['roi']*100:+.1f}%" if pd.notna(overall["roi"]) else "—")
+
+        st.download_button("Download bet ledger CSV",data=bets.to_csv(index=False).encode("utf-8"),file_name="my_bets.csv",mime="text/csv")
 
         st.divider()
         st.write("Remove an accidental bet")
-        delete_options = display_bets.sort_values("entered_at_utc", ascending=False).copy()
-        delete_options["delete_label"] = delete_options.apply(
-            lambda row: (
-                f"{display_timestamp(row['entered_at_utc'])} — {row['matchup']} — "
-                f"{row['team']} {format_spread(float(row['bet_spread']))} "
-                f"{format_american(float(row['odds_american']))} — "
-                f"{row['sportsbook']} — USD {float(row['stake']):.2f}"
-            ),
-            axis=1,
+        delete_options=display_bets.sort_values("entered_at_utc",ascending=False).copy()
+        delete_options["delete_label"]=delete_options.apply(
+            lambda row:f"{display_timestamp(row['entered_at_utc'])} — {row['matchup']} — {row['Bet']} — {row['sportsbook']} — USD {float(row['stake']):.2f}",axis=1
         )
-        delete_lookup = dict(zip(delete_options["delete_label"], delete_options["bet_id"].astype(str)))
-        delete_choice = st.selectbox(
-            "Bet to remove",
-            ["Select a bet…"] + list(delete_lookup),
-            key="delete_bet_choice",
-        )
-        if st.button(
-            "Delete selected bet",
-            disabled=delete_choice == "Select a bet…",
-            key="delete_selected_bet",
-        ):
-            bets = bet_tracking.delete_bet(bets_path, delete_lookup[delete_choice])
+        delete_lookup=dict(zip(delete_options["delete_label"],delete_options["bet_id"].astype(str)))
+        delete_choice=st.selectbox("Bet to remove",["Select a bet…"]+list(delete_lookup),key="delete_bet_choice")
+        if st.button("Delete selected bet",disabled=delete_choice=="Select a bet…",key="delete_selected_bet"):
+            bet_tracking.delete_bet(bets_path,delete_lookup[delete_choice])
             st.success("Deleted the selected bet.")
             st.rerun()
 
-    st.caption(
-        "Actual bet CLV is separate from model-to-close tracking. It compares the exact spread you "
-        "bet with the automated pre-kickoff consensus close from the bettor's perspective; positive "
-        "means you beat the close. If the close was not captured, it stays blank rather than being backfilled."
-    )
+with tab8:
+    st.subheader("Bet Breakdown")
+    st.caption("Performance by wager type. Stake and ROI use graded bets only.")
+    bets_path = ROOT / "data" / "tracking" / "my_bets.csv"
+    breakdown_bets = bet_tracking.grade_bets_against_closes(bet_tracking.load_bets(bets_path), game_grades)
+    if breakdown_bets.empty:
+        st.info("No bets recorded yet.")
+    else:
+        summary = bet_tracking.summarize_bets(breakdown_bets)
+        detail = summary.loc[~summary["bet_type"].eq("OVERALL")].copy()
+        detail["Record"] = detail.apply(lambda r:f"{int(r['wins'])}-{int(r['losses'])}-{int(r['pushes'])}",axis=1)
+        detail["Stake"] = detail["stake"].map(lambda x:f"USD {x:.2f}")
+        detail["G/L"] = detail["profit_loss"].map(lambda x:f"USD {x:+.2f}")
+        detail["ROI"] = detail["roi"].map(lambda x:f"{x*100:+.1f}%" if pd.notna(x) else "—")
+        st.dataframe(detail[["bet_type","Record","Stake","G/L","ROI"]].rename(columns={"bet_type":"Bet type"}),use_container_width=True,hide_index=True)
+
+        graded = breakdown_bets.loc[breakdown_bets["actual_bet_result"].isin(["Win","Loss","Push"])].copy()
+        if not graded.empty:
+            by_book = graded.groupby("sportsbook",as_index=False).agg(
+                Bets=("bet_id","count"), Stake=("stake","sum"), GL=("profit_loss","sum")
+            )
+            by_book["ROI"] = by_book["GL"] / by_book["Stake"]
+            by_book["Stake"] = by_book["Stake"].map(lambda x:f"USD {float(x):.2f}")
+            by_book["G/L"] = by_book["GL"].map(lambda x:f"USD {float(x):+.2f}")
+            by_book["ROI"] = by_book["ROI"].map(lambda x:f"{x*100:+.1f}%")
+            st.write("By sportsbook")
+            st.dataframe(by_book[["sportsbook","Bets","Stake","G/L","ROI"]].rename(columns={"sportsbook":"Sportsbook"}),use_container_width=True,hide_index=True)
+
+            by_week = graded.groupby("week",as_index=False).agg(Bets=("bet_id","count"),Stake=("stake","sum"),GL=("profit_loss","sum"))
+            by_week["ROI"]=by_week["GL"]/by_week["Stake"]
+            by_week["Stake"]=by_week["Stake"].map(lambda x:f"USD {float(x):.2f}")
+            by_week["G/L"]=by_week["GL"].map(lambda x:f"USD {float(x):+.2f}")
+            by_week["ROI"]=by_week["ROI"].map(lambda x:f"{x*100:+.1f}%")
+            st.write("By week")
+            st.dataframe(by_week[["week","Bets","Stake","G/L","ROI"]].rename(columns={"week":"Week"}),use_container_width=True,hide_index=True)
+
