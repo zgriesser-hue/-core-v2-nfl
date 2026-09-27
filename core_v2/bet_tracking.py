@@ -41,6 +41,16 @@ def append_bet(path: Path, record: dict) -> pd.DataFrame:
             int(row["season"]), int(row["week"]), str(row["game_id"]),
             str(row["team"]), str(row["entered_at_utc"]),
         )
+    duplicate_fields = ["season", "week", "game_id", "team", "bet_spread", "odds_american", "sportsbook", "stake"]
+    if not bets.empty:
+        duplicate = pd.Series(True, index=bets.index)
+        for field in duplicate_fields:
+            duplicate &= bets[field].astype(str).str.strip().str.lower().eq(
+                str(row[field]).strip().lower()
+            )
+        if duplicate.any():
+            return bets
+
     updated = pd.concat([bets, pd.DataFrame([row])], ignore_index=True)
     path.parent.mkdir(parents=True, exist_ok=True)
     updated.to_csv(path, index=False)
@@ -144,3 +154,12 @@ def grade_bets_against_closes(bets: pd.DataFrame, game_grades: pd.DataFrame) -> 
 
     merged[["closing_selected_team_spread", "actual_bet_clv_points", "actual_bet_result", "profit_loss"]] = merged.apply(grade_row, axis=1)
     return merged
+
+
+def delete_bet(path: Path, bet_id: str) -> pd.DataFrame:
+    """Delete one explicitly selected wager from the local ledger."""
+    bets = load_bets(path)
+    updated = bets.loc[~bets["bet_id"].astype(str).eq(str(bet_id))].copy()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    updated.to_csv(path, index=False)
+    return updated
