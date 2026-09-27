@@ -1896,8 +1896,16 @@ with tab7:
         display_bets["Entered"] = display_bets["entered_at_utc"].map(display_timestamp)
         display_bets["Result"] = display_bets["actual_bet_result"].fillna("Pending")
         display_bets["P/L"] = pd.to_numeric(display_bets["profit_loss"],errors="coerce").map(lambda x:f"USD {x:+.2f}" if pd.notna(x) else "Pending")
+        def format_bet_clv(row):
+            value = pd.to_numeric(pd.Series([row.get("actual_bet_clv_points")]), errors="coerce").iloc[0]
+            if pd.isna(value):
+                return "Pending"
+            if str(row.get("bet_type", "")).upper() == "MONEYLINE":
+                return f"{float(value):+.2f} pp"
+            return f"{float(value):+.1f} pts"
+        display_bets["CLV"] = display_bets.apply(format_bet_clv, axis=1)
         st.dataframe(
-            display_bets[["week","matchup","bet_type","Bet","sportsbook","Stake","Entered","Result","P/L","status"]]
+            display_bets[["week","matchup","bet_type","Bet","sportsbook","Stake","Entered","Result","P/L","CLV","status"]]
             .rename(columns={"week":"Week","matchup":"Matchup","bet_type":"Type","sportsbook":"Book","status":"Status"})
             .sort_values(["Week","Entered"],ascending=[False,False]),
             use_container_width=True, hide_index=True,
