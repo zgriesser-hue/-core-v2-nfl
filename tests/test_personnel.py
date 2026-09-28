@@ -4,6 +4,7 @@ from core_v2.personnel import (
     build_personnel_adjustments,
     frozen_status_weight,
     load_weekly_team_adjustments,
+    fetch_nfl_injury_report,
 )
 from core_v2.projections import build_projection_board
 
@@ -113,3 +114,51 @@ def test_uncertain_qb_adjustment_changes_center_and_projection_band():
     board = build_projection_board(schedule, ratings, personnel, 2026, 3)
     assert board.loc[0, "projection_display_status"] == "EARLY_PROVISIONAL"
     assert abs(board.loc[0, "fair_spread_high"] - board.loc[0, "fair_spread_low"] - 1.5) < 1e-10
+
+
+def test_fetch_injury_report_accepts_matching_week_heading(monkeypatch):
+    html = """
+    <html><head><title>Official NFL Injury Report for Players - Week 3 of the 2026 Season</title></head>
+    <body><h1>2026 NFL Injury Report</h1><h2>Injuries - WEEK 3</h2></body></html>
+    """
+
+    class Response:
+        text = html
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr("core_v2.personnel.requests.get", lambda *args, **kwargs: Response())
+    monkeypatch.setattr(
+        "core_v2.personnel.parse_nfl_injury_html",
+        lambda html, valid_teams: (
+            pd.DataFrame([{
+                "team": "ATL", "player_name": "Player One", "position_reported": "DE",
+                "injury": "Hamstring", "practice_status": "DNP", "game_status": "Out",
+                "source_table": 0,
+            }]),
+            {"ATL", "GB"},
+        ),
+    )
+
+    report, teams = fetch_nfl_injury_report(2026, 3, {"ATL", "GB"})
+    assert teams == {"ATL", "GB"}
+    assert report.loc[0, "source_week"] == 3
+    assert report.loc[0, "source_season"] == 2026
+
+
+def test_fetch_injury_report_rejects_prior_week_heading(monkeypatch):
+    html = """
+    <html><head><title>Official NFL Injury Report for Players - Week 2 of the 2026 Season</title></head>
+    <body><h2>Injuries - WEEK 2</h2></body></html>
+    """
+
+    class Response:
+        text = html
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr("core_v2.personnel.requests.get", lambda *args, **kwargs: Response())
+
+    import pytest
+    with pytest.raises(ValueError, match="stale prior-week designations"):
+        fetch_nfl_injury_report(2026, 3, {"ATL", "GB"})
