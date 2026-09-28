@@ -108,6 +108,19 @@ def predict_week_points_scale(
     """
     s = state.set_index("team")
 
+    # When assembly supplies provenance, fail closed on incomplete personnel
+    # coverage. Missing injury data must never become a healthy zero.
+    valid_personnel_provenance = {"player_audit_native_v3", "covered_no_defensive_losses"}
+    for side in ("home", "away"):
+        provenance_col = f"{side}_personnel_provenance"
+        if provenance_col in matchups.columns:
+            bad = ~matchups[provenance_col].isin(valid_personnel_provenance)
+            if bad.any():
+                bad_values = sorted(matchups.loc[bad, provenance_col].astype(str).unique())
+                raise ValueError(
+                    f"Native V3 personnel coverage is incomplete for {side}: {bad_values}"
+                )
+
     market_cal = market.MarketCalibration(
         beta=config.EXPERIMENTAL_MARKET_BETA, span=config.EXPERIMENTAL_MARKET_SIGNAL_SPAN
     )
