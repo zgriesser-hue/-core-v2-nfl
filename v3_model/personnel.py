@@ -100,7 +100,23 @@ def fit_personnel_adjustment(
 
 
 _POSITION_GROUP_MAP = {"C":"OL","G":"OL","OG":"OL","OL":"OL","OT":"OL","T":"OL","WR":"WR_TE","TE":"WR_TE","RB":"RB","FB":"RB","EDGE":"EDGE","DE":"EDGE","IDL":"IDL","DT":"IDL","NT":"IDL","LB":"LB","ILB":"LB","OLB":"LB","CB":"DB","DB":"DB","S":"DB","FS":"DB","SS":"DB","K":"ST","P":"ST","LS":"ST","QB":"QB"}
-DEFENSIVE_POSITION_GROUPS=frozenset({"EDGE","IDL","LB","DB"})\nNATIVE_V3_DEFENSIVE_PVAR_POINTS = 2.25\n\ndef continuous_personnel_adjustment(home_def_loss: object, away_def_loss: object, points_per_pvar: float = NATIVE_V3_DEFENSIVE_PVAR_POINTS) -> pd.Series:\n    """Fixed native-V3 defensive personnel adjustment in home-margin points."""\n    home = pd.to_numeric(pd.Series(home_def_loss), errors="coerce")\n    away = pd.to_numeric(pd.Series(away_def_loss), errors="coerce")\n    if home.isna().any() or away.isna().any():\n        raise ValueError("Native V3 personnel loss is missing; refusing to treat missing data as healthy.")\n    return points_per_pvar * (away - home)
+DEFENSIVE_POSITION_GROUPS = frozenset({"EDGE", "IDL", "LB", "DB"})
+NATIVE_V3_DEFENSIVE_PVAR_POINTS = 2.25
+
+
+def continuous_personnel_adjustment(
+    home_def_loss: object,
+    away_def_loss: object,
+    points_per_pvar: float = NATIVE_V3_DEFENSIVE_PVAR_POINTS,
+) -> pd.Series:
+    """Fixed native-V3 defensive personnel adjustment in home-margin points."""
+    home = pd.to_numeric(pd.Series(home_def_loss), errors="coerce")
+    away = pd.to_numeric(pd.Series(away_def_loss), errors="coerce")
+    if home.isna().any() or away.isna().any():
+        raise ValueError(
+            "Native V3 personnel loss is missing; refusing to treat missing data as healthy."
+        )
+    return points_per_pvar * (away - home)
 
 def normalize_position_group(value: object) -> str:
     position=str(value).upper().strip()
