@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from . import market
+from . import market, personnel
 
 
 def load_team_game_history(path: str, through_season: int, through_week: int) -> pd.DataFrame:
@@ -80,6 +80,7 @@ def build_matchups(
     season: int,
     week: int,
     market_signal_table: pd.DataFrame | None = None,
+    personnel_audit: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
     Build the `matchups` DataFrame predict_2026.predict_week expects
@@ -139,12 +140,15 @@ def build_matchups(
             wk[f"{side}_market_signal_ewm5"] = 0.0
             wk[f"{side}_market_signal_provenance"] = "no_signal_table_supplied"
 
-    # Personnel not wired yet - see module docstring. Provenance makes the
-    # placeholder status explicit rather than indistinguishable from a real zero.
-    wk["home_def_loss"] = 0.0
-    wk["away_def_loss"] = 0.0
-    wk["home_personnel_provenance"] = "pvar_not_wired"
-    wk["away_personnel_provenance"] = "pvar_not_wired"
+    # Native V3 personnel input. The weekly player audit is aggregated to
+    # defensive exposure only; QB/offense remain separate model components.
+    if personnel_audit is not None:
+        wk = personnel.add_personnel_to_matchups(wk, personnel_audit)
+    else:
+        wk["home_def_loss"] = 0.0
+        wk["away_def_loss"] = 0.0
+        wk["home_personnel_provenance"] = "pvar_audit_not_supplied"
+        wk["away_personnel_provenance"] = "pvar_audit_not_supplied"
 
     if "neutral_site" not in wk.columns:
         wk["neutral_site"] = False
