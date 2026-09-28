@@ -359,8 +359,8 @@ else:
     st.sidebar.write(f"V3.3 market signal status: **{market_status}**")
 st.sidebar.write("Personnel: **V2 bridge active** (temporary); native V3 PVAR remains in development")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["Market Board", "Game Detail", "Power Ratings", "Model Performance", "My Bets"]
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["Market Board", "Game Detail", "Power Ratings", "Model Performance", "My Bets", "Early Injury Watch"]
 )
 
 with tab1:
@@ -518,3 +518,21 @@ with tab5:
         m2.metric("Gain / loss",f"USD {overall['profit_loss']:+.2f}")
         backed=display_bets_v3["V3 backing"].eq("Backed by V3").sum()
         m3.metric("Spread bets backed by V3",int(backed))
+
+
+with tab6:
+    st.subheader("Early Injury Watch")
+    st.caption("Prior-week absences are verification leads only. Blank current-week status means availability is unknown; no PVAR adjustment is applied.")
+    watch_path = ROOT / "data" / "research" / "v3" / "week_04_early_injury_watchlist.csv"
+    if watch_path.exists():
+        watch = load_csv(str(watch_path))
+        if not watch.empty:
+            st.caption(f"Research snapshot: Week {int(watch['week'].iloc[0])}. Refresh when official reports arrive.")
+            cols = ["game_id", "team", "player_name", "position_group", "prior_game_status", "current_game_status", "verification", "pvar_production"]
+            shown = watch[cols].copy()
+            shown["pvar_production"] = pd.to_numeric(shown["pvar_production"], errors="coerce")
+            st.dataframe(shown.sort_values("pvar_production", ascending=False, na_position="last"), use_container_width=True, hide_index=True)
+        else:
+            st.info("The early injury watchlist is empty.")
+    else:
+        st.info("No early injury watchlist has been published for this week.")
