@@ -165,8 +165,31 @@ def attach_player_pvar_to_audit(audit: pd.DataFrame, ratings: pd.DataFrame) -> p
     return out
 
 
+def attach_player_pvar_to_audit(audit: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFrame:
+    """Attach authoritative 2026 Stage-2i PVAR values to the weekly audit by GSIS ID."""
+    required = {"gsis_id", "pvar_rating_rebased", "pvar_rating_role_only", "pvar_confidence"}
+    missing = required - set(ratings.columns)
+    if missing:
+        raise ValueError(f"V3 PVAR ratings missing columns: {sorted(missing)}")
+
+    out = audit.copy()
+    out["gsis_id"] = out["gsis_id"].astype("string")
+    values = ratings.copy()
+    values["gsis_id"] = values["gsis_id"].astype("string")
+    values = values.loc[values["gsis_id"].notna()].copy()
+    if values["gsis_id"].duplicated().any():
+        dupes = sorted(values.loc[values["gsis_id"].duplicated(False), "gsis_id"].unique())
+        raise ValueError(f"V3 PVAR ratings contain duplicate GSIS IDs: {dupes[:10]}")
+
+    keep = ["gsis_id", "pvar_rating_rebased", "pvar_rating_role_only", "pvar_confidence"]
+    out = out.merge(values[keep], on="gsis_id", how="left", validate="many_to_one")
+    out["pvar_rating_rebased"] = pd.to_numeric(out["pvar_rating_rebased"], errors="coerce")
+    out["pvar_rating_role_only"] = pd.to_numeric(out["pvar_rating_role_only"], errors="coerce")
+    return out
+
+
 def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate status-weighted rebased player PVAR into native V3 defensive loss."""
+    """Aggregate status-weighted player PVAR into native V3 defensive loss."""
     columns = [
         "team", "def_loss_pvar", "def_max_player_loss", "def_high_role_count",
         "def_edge_loss", "def_idl_loss", "def_lb_loss", "def_db_loss",
@@ -195,41 +218,40 @@ def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=columns)
 
-    if "loss_pvar" not in df.columns:
-        if "status_weight" not in df.columns or "pvar_rating_rebased" not in df.columns:
-            raise ValueError(
-                "Native V3 personnel audit requires status_weight and pvar_rating_rebased."
-            )
-        df["loss_pvar"] = (
-            pd.to_numeric(df["status_weight"], errors="coerce")
-            * pd.to_numeric(df["pvar_rating_rebased"], errors="coerce")
+    required = {"status_weight", "pvar_rating_rebased"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Native V3 personnel audit missing PVAR inputs: {sorted(missing)}")
+
+    df["_status_weight"] = pd.to_numeric(df["status_weight"], errors="coerce")
+    df["_pvar"] = pd.to_numeric(df["pvar_rating_rebased"], errors="coerce")
+    unresolved = df["_status_weight"].isna() | df["_pvar"].isna() | df["gsis_id"].isna()
+    if unresolved.any():
+        names = df.loc[unresolved, ["team", "player_name"]].astype(str).agg(" ".join, axis=1).tolist()
+        raise ValueError(
+            "Native V3 eligible defensive players have unresolved status/PVAR/GSIS: "
+            + ", ".join(names[:20])
         )
 
-    df["_loss"] = pd.to_numeric(df["loss_pvar"], errors="coerce")
-    bad = df["_loss"].isna()
-    if bad.any():
-        names = df.loc[bad, ["team", "player_name"]].astype(str).agg(":".join, axis=1).tolist()
-        raise ValueError(
-            "Native V3 eligible defensive player has unresolved PVAR/status: "
-            + ", ".join(names)
-        )
-    if (df["_loss"] < 0).any():
-        raise ValueError("Native V3 defensive PVAR loss cannot be negative.")
+    # This is the established Stage-2i exposure construction. Do NOT multiply
+    # by expected_role/weighted_role_exposure_v2: the historical V3 coefficient
+    # was trained on status-weighted PVAR loss.
+    df["_loss_pvar"] = df["_status_weight"].clip(lower=0.0) * df["_pvar"].clip(lower=0.0)
 
     rows = []
     for team_name, group_df in df.groupby("team", dropna=False):
         rec = {
             "team": team_name,
-            "def_loss_pvar": float(group_df["_loss"].sum()),
-            "def_max_player_loss": float(group_df["_loss"].max()) if len(group_df) else 0.0,
-            "def_high_role_count": int((group_df["_loss"] >= 0.50).sum()),
+            "def_loss_pvar": float(group_df["_loss_pvar"].sum()),
+            "def_max_player_loss": float(group_df["_loss_pvar"].max()) if len(group_df) else 0.0,
+            "def_high_role_count": int((group_df["_loss_pvar"] >= 0.50).sum()),
             "personnel_players_observed": int(len(group_df)),
         }
         for group, col in [
             ("EDGE", "def_edge_loss"), ("IDL", "def_idl_loss"),
             ("LB", "def_lb_loss"), ("DB", "def_db_loss"),
         ]:
-            rec[col] = float(group_df.loc[group_df["_group"].eq(group), "_loss"].sum())
+            rec[col] = float(group_df.loc[group_df["_group"].eq(group), "_loss_pvar"].sum())
         rows.append(rec)
     return pd.DataFrame(rows, columns=columns)
 
