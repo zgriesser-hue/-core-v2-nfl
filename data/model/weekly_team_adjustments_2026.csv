@@ -12,4 +12,3 @@ season,week,team,adjustment_points,category,player,reason,exclude_from_auto,end_
 2026,3,ATL,-0.39,INJURY,Da'Shawn Hand,Confirmed season-ending injury; carry forward reviewed Week 2 adjustment,True,18,
 2026,3,CHI,-1.125,QB_PROVISIONAL,Caleb Williams,Week 3 provisional 75 percent Bagent start scenario times 1.50-point conditional downgrade; review after practice reports,False,,-1.50
 2026,3,WAS,-1.50,QB_PROVISIONAL,Jayden Daniels,Week 3 provisional Mariota start assumption following elbow dislocation; 1.50-point conditional downgrade; review after imaging,False,,-1.50
-2026,4,WAS,-1.50,QB_PROVISIONAL,Jayden Daniels,Week 4 early Mariota-start scenario following Daniels elbow dislocation; team says week-to-week as of Sep 25; verify Week 4 starter before release,False,,-1.50
