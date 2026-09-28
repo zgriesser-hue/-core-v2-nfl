@@ -853,11 +853,11 @@ def test_native_personnel_position_normalization():
 def test_attach_player_pvar_joins_by_gsis():
     audit=pd.DataFrame({"gsis_id":["00-1"],"player_name":["Defender"]})
     ratings=pd.DataFrame({
-        "gsis_id":["00-1"],"pvar_rating_rebased":[0.8],
-        "pvar_rating_role_only":[0.7],"pvar_confidence":["HISTORICAL"],
+        "gsis_id":["00-1"],"pvar_production":[0.8],
+        "pvar_source":["REBASED"],
     })
     out=personnel.attach_player_pvar_to_audit(audit,ratings)
-    assert out.loc[0,"pvar_rating_rebased"]==pytest.approx(0.8)
+    assert out.loc[0,"pvar_production"]==pytest.approx(0.8)
 
 def test_native_personnel_uses_status_weight_times_rebased_pvar():
     audit=pd.DataFrame({
@@ -866,7 +866,7 @@ def test_native_personnel_uses_status_weight_times_rebased_pvar():
         "gsis_id":["1","2","3","4","5","6"],
         "position_group":["EDGE","IDL","LB","DB","WR_TE","QB"],
         "status_weight":[1.0,0.5,0.2,0.35,1.0,1.0],
-        "pvar_rating_rebased":[0.4,0.6,0.5,0.8,1.0,1.0],
+        "pvar_production":[0.4,0.6,0.5,0.8,1.0,1.0],
         "v2_shadow_eligible":[True]*6,
     })
     row=personnel.defensive_exposure_from_audit(audit).iloc[0]
@@ -882,7 +882,7 @@ def test_native_personnel_does_not_multiply_by_role_exposure():
         "team":["BUF"],"player_name":["DB"],"gsis_id":["1"],
         "position_group":["DB"],"status_weight":[0.35],
         "weighted_role_exposure_v2":[0.035],
-        "pvar_rating_rebased":[0.8],"v2_shadow_eligible":[True],
+        "pvar_production":[0.8],"v2_shadow_eligible":[True],
     })
     row=personnel.defensive_exposure_from_audit(audit).iloc[0]
     assert row["def_loss_pvar"]==pytest.approx(0.28)
@@ -891,7 +891,7 @@ def test_native_personnel_refuses_missing_eligible_defensive_pvar():
     audit=pd.DataFrame({
         "team":["SEA"],"player_name":["Missing"],"gsis_id":["1"],
         "position_group":["DB"],"status_weight":[1.0],
-        "pvar_rating_rebased":[float("nan")],"v2_shadow_eligible":[True],
+        "pvar_production":[float("nan")],"v2_shadow_eligible":[True],
     })
     with pytest.raises(ValueError, match="unresolved"):
         personnel.defensive_exposure_from_audit(audit)
@@ -900,7 +900,7 @@ def test_native_personnel_excludes_qb_before_pvar_validation():
     audit=pd.DataFrame({
         "team":["WAS"],"player_name":["QB"],"gsis_id":["1"],
         "position_group":["QB"],"status_weight":[1.0],
-        "pvar_rating_rebased":[float("nan")],"v2_shadow_eligible":[True],
+        "pvar_production":[float("nan")],"v2_shadow_eligible":[True],
     })
     assert personnel.defensive_exposure_from_audit(audit).empty
 
@@ -914,7 +914,7 @@ def test_add_personnel_to_matchups_sets_real_provenance():
     audit=pd.DataFrame({
         "team":["SEA","BUF"],"player_name":["A","B"],"gsis_id":["1","2"],
         "position_group":["DB","EDGE"],"status_weight":[1.0,0.5],
-        "pvar_rating_rebased":[0.6,0.4],"v2_shadow_eligible":[True,True],
+        "pvar_production":[0.6,0.4],"v2_shadow_eligible":[True,True],
     })
     out=personnel.add_personnel_to_matchups(matchup,audit,covered_teams={"SEA","BUF"}).iloc[0]
     assert out["home_def_loss"]==pytest.approx(0.6)
@@ -933,7 +933,7 @@ def test_native_personnel_string_false_is_not_eligible():
     audit=pd.DataFrame({
         "team":["SEA","SEA"],"player_name":["A","B"],"gsis_id":["1","2"],
         "position_group":["DB","EDGE"],"status_weight":[1.0,1.0],
-        "pvar_rating_rebased":[0.6,0.4],"v2_shadow_eligible":["False","True"],
+        "pvar_production":[0.6,0.4],"v2_shadow_eligible":["False","True"],
     })
     row=personnel.defensive_exposure_from_audit(audit).iloc[0]
     assert row["def_loss_pvar"]==pytest.approx(0.4)
@@ -951,7 +951,7 @@ def test_native_personnel_missing_team_coverage_stays_missing():
     audit=pd.DataFrame({
         "team":["SEA"],"player_name":["A"],"gsis_id":["1"],
         "position_group":["DB"],"status_weight":[1.0],
-        "pvar_rating_rebased":[0.2],"v2_shadow_eligible":[True],
+        "pvar_production":[0.2],"v2_shadow_eligible":[True],
     })
     out=personnel.add_personnel_to_matchups(matchup,audit,covered_teams={"SEA"}).iloc[0]
     assert pd.isna(out["away_def_loss"])
