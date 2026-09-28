@@ -1,6 +1,11 @@
 name: Build V3 weekly research board
 
 on:
+  pull_request:
+    paths:
+      - "scripts/build_v3_*.py"
+      - ".github/workflows/v3_weekly_board.yml"
+      - "pages/1_V3_Dashboard.py"
   schedule:
     - cron: "45 14 * * 1,2"
     - cron: "15 21 * * 3,4,5,6"
@@ -79,6 +84,7 @@ jobs:
             --out "data/research/v3/week_${WEEK_PADDED}_v3_board.csv"
           cp "data/research/v3/week_${WEEK_PADDED}_v3_board.csv" week_v3_board.csv
       - name: Commit validated V3 research snapshot
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           if [ -z "$(git status --porcelain -- data/research/v3 data/production week_v3_board.csv)" ]; then
