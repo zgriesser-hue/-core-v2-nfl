@@ -841,3 +841,55 @@ def test_bet_tracking_uses_bookmaker_convention_fair_display():
     )
     # Away team's own spread is the negation of the home spread.
     assert away_selected == pytest.approx(4.6)
+
+
+def test_native_personnel_position_normalization():
+    assert personnel.normalize_position_group("DE")=="EDGE"
+    assert personnel.normalize_position_group("DT")=="IDL"
+    assert personnel.normalize_position_group("S")=="DB"
+    assert personnel.normalize_position_group("WR")=="WR_TE"
+    assert personnel.normalize_position_group("QB")=="QB"
+
+def test_native_personnel_excludes_offense_qb_and_aggregates_defense():
+    audit=pd.DataFrame({
+        "team":["SEA"]*6,
+        "position_group":["EDGE","IDL","LB","DB","WR_TE","QB"],
+        "weighted_role_exposure_v2":[0.40,0.30,0.20,0.10,0.90,1.00],
+        "v2_shadow_eligible":[True,True,True,True,True,True],
+    })
+    row=personnel.defensive_exposure_from_audit(audit).iloc[0]
+    assert row["def_loss_pvar"]==pytest.approx(1.0)
+    assert row["def_edge_loss"]==pytest.approx(0.40)
+    assert row["def_idl_loss"]==pytest.approx(0.30)
+    assert row["def_lb_loss"]==pytest.approx(0.20)
+    assert row["def_db_loss"]==pytest.approx(0.10)
+    assert row["def_high_role_count"]==0
+
+def test_native_personnel_prefers_repaired_v2_exposure():
+    audit=pd.DataFrame({
+        "team":["BUF"],
+        "position_group":["DB"],
+        "weighted_role_exposure":[0.10],
+        "weighted_role_exposure_v2":[0.315],
+        "v2_shadow_eligible":[True],
+    })
+    row=personnel.defensive_exposure_from_audit(audit).iloc[0]
+    assert row["def_loss_pvar"]==pytest.approx(0.315)
+
+def test_threshold_calibration_empty_is_safe():
+    check=personnel.check_threshold_calibration(pd.Series(dtype=float),0.75)
+    assert check.n==0
+    assert not check.intended_rate_within_ci
+
+def test_add_personnel_to_matchups_sets_real_provenance():
+    matchup=pd.DataFrame({"home_team":["SEA"],"away_team":["BUF"]})
+    audit=pd.DataFrame({
+        "team":["SEA","BUF"],
+        "position_group":["DB","EDGE"],
+        "weighted_role_exposure_v2":[0.6,0.2],
+        "v2_shadow_eligible":[True,True],
+    })
+    out=personnel.add_personnel_to_matchups(matchup,audit).iloc[0]
+    assert out["home_def_loss"]==pytest.approx(0.6)
+    assert out["away_def_loss"]==pytest.approx(0.2)
+    assert out["home_personnel_provenance"]=="player_audit_native_v3"
