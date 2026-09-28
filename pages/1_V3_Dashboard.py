@@ -220,6 +220,19 @@ if missing_cols:
 active_season = int(raw_board["season"].iloc[0])
 active_week = int(raw_board["week"].iloc[0])
 
+# The V3 snapshot is independent of Core V2's weekly publish. Make lag visible.
+current_v2_path = locate_file("current_live_board.csv")
+if current_v2_path is not None:
+    current_v2 = load_csv(str(current_v2_path))
+    if not current_v2.empty and "week" in current_v2.columns:
+        current_v2_week = int(current_v2["week"].iloc[0])
+        if current_v2_week > active_week:
+            st.warning(
+                f"V3 Week {current_v2_week} is not published. This is the archived "
+                f"Week {active_week} V3 board; the current Core V2 board is Week "
+                f"{current_v2_week}. Do not use these V3 lines as current projections."
+            )
+
 # Reuses the SAME static lines file app.py reads - see module docstring.
 static_lines_path = locate_file("current_book_lines.csv") or locate_file("week_01_book_lines.csv")
 static_lines = load_csv(str(static_lines_path)) if static_lines_path else pd.DataFrame()
