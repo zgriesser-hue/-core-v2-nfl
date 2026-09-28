@@ -1,5 +1,5 @@
 """
-V3.2 - major defensive-attrition personnel adjustment.
+V3 personnel engine.\n\nHistorical V3.2 used a binary major-defensive-attrition rule. Native V3\nproduction now uses the separately validated fixed continuous defensive-PVAR\nspecification: 2.25 * (away defensive loss - home defensive loss). The old\nV3.2 calibration helpers remain here as frozen research/backtest compatibility.
 
 Extracted from V3.ipynb, cell "V3.2d - FINAL MAJOR DEFENSIVE
 ATTRITION SPREAD TEST".
@@ -100,7 +100,7 @@ def fit_personnel_adjustment(
 
 
 _POSITION_GROUP_MAP = {"C":"OL","G":"OL","OG":"OL","OL":"OL","OT":"OL","T":"OL","WR":"WR_TE","TE":"WR_TE","RB":"RB","FB":"RB","EDGE":"EDGE","DE":"EDGE","IDL":"IDL","DT":"IDL","NT":"IDL","LB":"LB","ILB":"LB","OLB":"LB","CB":"DB","DB":"DB","S":"DB","FS":"DB","SS":"DB","K":"ST","P":"ST","LS":"ST","QB":"QB"}
-DEFENSIVE_POSITION_GROUPS=frozenset({"EDGE","IDL","LB","DB"})
+DEFENSIVE_POSITION_GROUPS=frozenset({"EDGE","IDL","LB","DB"})\nNATIVE_V3_DEFENSIVE_PVAR_POINTS = 2.25\n\ndef continuous_personnel_adjustment(home_def_loss: object, away_def_loss: object, points_per_pvar: float = NATIVE_V3_DEFENSIVE_PVAR_POINTS) -> pd.Series:\n    """Fixed native-V3 defensive personnel adjustment in home-margin points."""\n    home = pd.to_numeric(pd.Series(home_def_loss), errors="coerce")\n    away = pd.to_numeric(pd.Series(away_def_loss), errors="coerce")\n    if home.isna().any() or away.isna().any():\n        raise ValueError("Native V3 personnel loss is missing; refusing to treat missing data as healthy.")\n    return points_per_pvar * (away - home)
 
 def normalize_position_group(value: object) -> str:
     position=str(value).upper().strip()
@@ -116,7 +116,7 @@ def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
     df=audit.copy()
     pos_source="position_group" if "position_group" in df.columns else ("matched_position" if "matched_position" in df.columns else "position_reported")
     df["_group"]=df[pos_source].map(normalize_position_group)
-    eligible=df["v2_shadow_eligible"].fillna(False).astype(bool) if "v2_shadow_eligible" in df.columns else pd.Series(True,index=df.index)
+    eligible=(df["v2_shadow_eligible"].map(lambda x: x if isinstance(x, (bool, np.bool_)) else str(x).strip().lower() in {"true","1","yes","y"}).fillna(False) if "v2_shadow_eligible" in df.columns else pd.Series(True,index=df.index))
     df=df.loc[df["_group"].isin(DEFENSIVE_POSITION_GROUPS) & eligible].copy()
     exposure_col="weighted_role_exposure_v2" if "weighted_role_exposure_v2" in df.columns else "weighted_role_exposure"
     df["_exposure"]=pd.to_numeric(df[exposure_col],errors="coerce").fillna(0.0).clip(lower=0.0)
@@ -128,7 +128,7 @@ def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
         rows.append(rec)
     return pd.DataFrame(rows,columns=columns)
 
-def add_personnel_to_matchups(matchups: pd.DataFrame, audit: pd.DataFrame) -> pd.DataFrame:
+def add_personnel_to_matchups(matchups: pd.DataFrame, audit: pd.DataFrame, covered_teams: set[str] | None = None) -> pd.DataFrame:
     """Join native defensive exposure features to a weekly matchup table."""
     out=matchups.copy()
     team=defensive_exposure_from_audit(audit)
