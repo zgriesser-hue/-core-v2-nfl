@@ -16,13 +16,7 @@ already have (or can export) each week:
       home margin implied for that game, plus that game's own pred_v30
       at the time - needed to build the lagged EWM5 signal)
 
-PERSONNEL IS NOT WIRED YET (see module docstring in predict_2026.py
-and prior discussion): build_matchups below sets home_def_loss /
-away_def_loss to 0.0 for every game, which makes personnel_adjustment
-zero - i.e. this currently runs pred_v33 (V3.0 + market), not the full
-pred_v36 (V3.0 + personnel + market). Wire in a real def_loss_pvar
-source and drop the 0.0 defaults once PVAR is un-shelved.
-"""
+PERSONNEL is wired through the native V3 weekly player audit. Missing team\ncoverage remains missing and is never silently interpreted as healthy.\n"""
 
 from __future__ import annotations
 
