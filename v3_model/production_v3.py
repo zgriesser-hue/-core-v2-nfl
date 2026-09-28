@@ -108,10 +108,6 @@ def predict_week_points_scale(
     """
     s = state.set_index("team")
 
-    personnel_cal = personnel.PersonnelCalibration(
-        threshold=config.EXPERIMENTAL_PERSONNEL_THRESHOLD,
-        adjustment_points=config.EXPERIMENTAL_PERSONNEL_ADJUSTMENT_POINTS,
-    )
     market_cal = market.MarketCalibration(
         beta=config.EXPERIMENTAL_MARKET_BETA, span=config.EXPERIMENTAL_MARKET_SIGNAL_SPAN
     )
@@ -126,9 +122,9 @@ def predict_week_points_scale(
         )
 
         personnel_adj = float(
-            personnel_cal.adjustment(
-                pd.Series([row.home_def_loss]), pd.Series([row.away_def_loss])
-            )[0]
+            personnel.continuous_personnel_adjustment(
+                [row.home_def_loss], [row.away_def_loss]
+            ).iloc[0]
         )
         signal_diff = row.home_market_signal_ewm5 - row.away_market_signal_ewm5
         market_adj = float(market_cal.adjustment([signal_diff])[0])
