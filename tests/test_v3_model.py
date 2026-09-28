@@ -893,3 +893,39 @@ def test_add_personnel_to_matchups_sets_real_provenance():
     assert out["home_def_loss"]==pytest.approx(0.6)
     assert out["away_def_loss"]==pytest.approx(0.2)
     assert out["home_personnel_provenance"]=="player_audit_native_v3"
+
+
+def test_native_continuous_personnel_adjustment_fixed_225():
+    adj=personnel.continuous_personnel_adjustment([0.20],[0.60])
+    assert adj.iloc[0]==pytest.approx(0.90)
+
+def test_native_continuous_personnel_refuses_missing_loss():
+    with pytest.raises(ValueError, match="missing"):
+        personnel.continuous_personnel_adjustment([float("nan")],[0.2])
+
+def test_native_personnel_string_false_is_not_eligible():
+    audit=pd.DataFrame({
+        "team":["SEA","SEA"],
+        "position_group":["DB","EDGE"],
+        "weighted_role_exposure_v2":[0.6,0.4],
+        "v2_shadow_eligible":["False","True"],
+    })
+    row=personnel.defensive_exposure_from_audit(audit).iloc[0]
+    assert row["def_loss_pvar"]==pytest.approx(0.4)
+
+def test_native_personnel_requires_exposure_column():
+    audit=pd.DataFrame({"team":["SEA"],"position_group":["DB"]})
+    with pytest.raises(ValueError, match="weighted role exposure"):
+        personnel.defensive_exposure_from_audit(audit)
+
+def test_native_personnel_missing_team_coverage_stays_missing():
+    matchup=pd.DataFrame({"home_team":["SEA"],"away_team":["BUF"]})
+    audit=pd.DataFrame({
+        "team":["SEA"],
+        "position_group":["DB"],
+        "weighted_role_exposure_v2":[0.2],
+        "v2_shadow_eligible":[True],
+    })
+    out=personnel.add_personnel_to_matchups(matchup,audit).iloc[0]
+    assert pd.isna(out["away_def_loss"])
+    assert out["away_personnel_provenance"]=="missing_team_coverage"
