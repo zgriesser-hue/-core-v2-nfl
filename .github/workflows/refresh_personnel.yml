@@ -2,6 +2,7 @@ name: Refresh weekly personnel
 
 on:
   schedule:
+    - cron: "0 14 * * 1,2"
     - cron: "30 20 * * 3,4,5,6"
   workflow_dispatch:
     inputs:
@@ -52,6 +53,7 @@ jobs:
             --roles "data/model/player_role_priors_${TARGET_SEASON}.csv" \
             --v2-role-repairs "data/model/player_role_repairs_v2_${TARGET_SEASON}.csv" \
             --weekly-adjustments "data/model/weekly_team_adjustments_${TARGET_SEASON}.csv" \
+            --availability-ledger "data/model/early_availability_${TARGET_SEASON}.csv" \
             --output-dir "$OUTPUT_DIR"
       - name: Validate candidate projection board
         shell: bash

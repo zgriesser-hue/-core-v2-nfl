@@ -16,6 +16,7 @@ from core_v2.personnel import (
 from core_v2.personnel_v2 import build_personnel_v2_shadow, load_v2_role_repairs
 from core_v2.projections import load_week_schedule
 from v3_model.personnel import attach_player_pvar_to_audit
+from scripts.early_availability import apply_early_availability, load_early_availability
 
 
 def main() -> None:
@@ -25,6 +26,7 @@ def main() -> None:
     parser.add_argument("--schedule", type=Path, required=True)
     parser.add_argument("--roles", type=Path, required=True)
     parser.add_argument("--weekly-adjustments", type=Path)
+    parser.add_argument("--availability-ledger", type=Path)
     parser.add_argument("--v2-role-repairs", type=Path)
     parser.add_argument("--v3-pvar-ratings", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -53,6 +55,10 @@ def main() -> None:
         report_teams = set()
     roles = load_role_priors(args.roles)
     weekly = load_weekly_team_adjustments(args.weekly_adjustments, args.season, args.week)
+    availability = load_early_availability(args.availability_ledger, args.season, args.week)
+    if not availability.empty and not set(availability.team).issubset(valid_teams):
+        raise ValueError("Availability ledger contains teams outside the target-week schedule")
+    weekly = apply_early_availability(weekly, availability)
     v2_repairs = load_v2_role_repairs(args.v2_role_repairs, args.season, args.week)
     personnel, audit = build_personnel_adjustments(
         schedule, roles, injuries, report_teams, weekly, args.season, args.week
@@ -72,6 +78,8 @@ def main() -> None:
     )
     atomic_write_csv(injuries, args.output_dir / "official_injury_report.csv")
     atomic_write_csv(coverage, args.output_dir / "report_coverage.csv")
+    if args.availability_ledger is not None:
+        atomic_write_csv(availability, args.output_dir / "early_availability_audit.csv")
     atomic_write_csv(audit, args.output_dir / "personnel_player_audit.csv")
     atomic_write_csv(shadow, args.output_dir / "personnel_v2_shadow.csv")
     atomic_write_csv(personnel, args.output_dir / "personnel_adjustments.csv")
