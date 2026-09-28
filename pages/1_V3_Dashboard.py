@@ -187,8 +187,8 @@ st.caption(
 )
 
 st.info(
-    "Personnel (PVAR) is not wired into this board yet - every "
-    "personnel_adjustment here is 0. See data_assembly.py's docstring."
+    "This saved Week 3 board uses the earlier V2 personnel bridge. "
+    "The fixed 2.25 defensive PVAR V3 shadow board is still in draft review."
 )
 
 board_filename = st.sidebar.text_input(
@@ -402,7 +402,7 @@ with tab2:
     if "personnel_adjustment" in row and "neutral_hfa_adjustment" in row:
         st.caption(
             f"Personnel adjustment: {row['personnel_adjustment']:.2f} pts "
-            "(0 until PVAR is wired in) | "
+            "(saved board value) | "
             f"Neutral-site adjustment: {row['neutral_hfa_adjustment']:.2f} pts"
         )
 
