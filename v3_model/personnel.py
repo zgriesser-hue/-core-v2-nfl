@@ -124,8 +124,49 @@ def normalize_position_group(value: object) -> str:
         return "OTHER"
     return _POSITION_GROUP_MAP.get(position,"OTHER")
 
+def attach_player_pvar_to_audit(audit: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFrame:
+    """Attach authoritative 2026 rebased PVAR; GSIS first, exact name+team fallback."""
+    if audit is None:
+        return audit
+    out = audit.copy()
+    required = {"gsis_id", "player_name", "team", "pvar_rating_rebased"}
+    missing = required - set(ratings.columns)
+    if missing:
+        raise ValueError(f"PVAR ratings missing required columns: {sorted(missing)}")
+
+    r = ratings.copy()
+    r["pvar_rating_rebased"] = pd.to_numeric(r["pvar_rating_rebased"], errors="coerce")
+    by_id = r.dropna(subset=["gsis_id"]).drop_duplicates("gsis_id", keep=False)
+    id_map = by_id.set_index("gsis_id")["pvar_rating_rebased"]
+
+    out["pvar_rating_rebased"] = out.get("gsis_id", pd.Series(pd.NA, index=out.index)).map(id_map)
+    out["pvar_resolution_method"] = np.where(out["pvar_rating_rebased"].notna(), "gsis_id", "unresolved")
+
+    # Exact, unique name+team fallback only; never fuzzy-match player value.
+    keys = ["player_name", "team"]
+    unique_name_team = (
+        r.dropna(subset=["player_name", "team"])
+         .groupby(keys, dropna=False)
+         .filter(lambda g: len(g) == 1)
+         .set_index(keys)["pvar_rating_rebased"]
+    )
+    unresolved = out["pvar_rating_rebased"].isna()
+    if unresolved.any():
+        fallback_keys = pd.MultiIndex.from_frame(out.loc[unresolved, keys])
+        fallback = pd.Series(fallback_keys.map(unique_name_team), index=out.index[unresolved])
+        hit = fallback.notna()
+        out.loc[fallback.index[hit], "pvar_rating_rebased"] = fallback.loc[hit].to_numpy()
+        out.loc[fallback.index[hit], "pvar_resolution_method"] = "exact_name_team"
+
+    out["loss_pvar"] = (
+        pd.to_numeric(out.get("status_weight"), errors="coerce")
+        * pd.to_numeric(out["pvar_rating_rebased"], errors="coerce")
+    )
+    return out
+
+
 def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate the weekly player audit into native V3 defensive features."""
+    """Aggregate status-weighted rebased player PVAR into native V3 defensive loss."""
     columns = [
         "team", "def_loss_pvar", "def_max_player_loss", "def_high_role_count",
         "def_edge_loss", "def_idl_loss", "def_lb_loss", "def_db_loss",
@@ -151,34 +192,44 @@ def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
         eligible = pd.Series(True, index=df.index)
 
     df = df.loc[df["_group"].isin(DEFENSIVE_POSITION_GROUPS) & eligible].copy()
+    if df.empty:
+        return pd.DataFrame(columns=columns)
 
-    if "weighted_role_exposure_v2" in df.columns:
-        exposure_col = "weighted_role_exposure_v2"
-    elif "weighted_role_exposure" in df.columns:
-        exposure_col = "weighted_role_exposure"
-    else:
-        raise ValueError(
-            "Native V3 personnel audit requires a weighted role exposure column."
+    if "loss_pvar" not in df.columns:
+        if "status_weight" not in df.columns or "pvar_rating_rebased" not in df.columns:
+            raise ValueError(
+                "Native V3 personnel audit requires status_weight and pvar_rating_rebased."
+            )
+        df["loss_pvar"] = (
+            pd.to_numeric(df["status_weight"], errors="coerce")
+            * pd.to_numeric(df["pvar_rating_rebased"], errors="coerce")
         )
 
-    df["_exposure"] = (
-        pd.to_numeric(df[exposure_col], errors="coerce").fillna(0.0).clip(lower=0.0)
-    )
+    df["_loss"] = pd.to_numeric(df["loss_pvar"], errors="coerce")
+    bad = df["_loss"].isna()
+    if bad.any():
+        names = df.loc[bad, ["team", "player_name"]].astype(str).agg(":".join, axis=1).tolist()
+        raise ValueError(
+            "Native V3 eligible defensive player has unresolved PVAR/status: "
+            + ", ".join(names)
+        )
+    if (df["_loss"] < 0).any():
+        raise ValueError("Native V3 defensive PVAR loss cannot be negative.")
 
     rows = []
     for team_name, group_df in df.groupby("team", dropna=False):
         rec = {
             "team": team_name,
-            "def_loss_pvar": float(group_df["_exposure"].sum()),
-            "def_max_player_loss": float(group_df["_exposure"].max()) if len(group_df) else 0.0,
-            "def_high_role_count": int((group_df["_exposure"] >= 0.50).sum()),
+            "def_loss_pvar": float(group_df["_loss"].sum()),
+            "def_max_player_loss": float(group_df["_loss"].max()) if len(group_df) else 0.0,
+            "def_high_role_count": int((group_df["_loss"] >= 0.50).sum()),
             "personnel_players_observed": int(len(group_df)),
         }
         for group, col in [
             ("EDGE", "def_edge_loss"), ("IDL", "def_idl_loss"),
             ("LB", "def_lb_loss"), ("DB", "def_db_loss"),
         ]:
-            rec[col] = float(group_df.loc[group_df["_group"].eq(group), "_exposure"].sum())
+            rec[col] = float(group_df.loc[group_df["_group"].eq(group), "_loss"].sum())
         rows.append(rec)
     return pd.DataFrame(rows, columns=columns)
 
