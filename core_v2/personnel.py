@@ -126,8 +126,8 @@ def fetch_nfl_injury_report(season: int, week: int, valid_teams: set[str]) -> tu
         for node in soup.find_all(["title", "h1", "h2"])
     )
     week_patterns = [
-        rf"\\bweek\\s*{int(week)}\\b",
-        rf"\\breg(?:ular season)?\\s*{int(week)}\\b",
+        rf"\bweek\s*{int(week)}\b",
+        rf"\breg(?:ular season)?\s*{int(week)}\b",
     ]
     if not any(
         re.search(pattern, heading_text, flags=re.IGNORECASE)
