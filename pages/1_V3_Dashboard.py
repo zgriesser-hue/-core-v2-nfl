@@ -186,11 +186,6 @@ st.caption(
     "+ EPA state updates + HFA/neutral-site. Market lines shown here are comparison-only."
 )
 
-st.info(
-    "This saved Week 3 board uses the earlier V2 personnel bridge. "
-    "The fixed 2.25 defensive PVAR V3 shadow board is still in draft review."
-)
-
 board_filename = st.sidebar.text_input(
     "Board file", value="week_v3_board.csv",
     help="The CSV board.py wrote for the week you want to view.",
@@ -207,6 +202,18 @@ if board_path is None:
     st.stop()
 
 raw_board = load_csv(str(board_path))
+if "personnel_status" in raw_board.columns and not raw_board.empty:
+    status = str(raw_board["personnel_status"].iloc[0])
+    if status == "EARLY_PROVISIONAL_DEF_PVAR_UNAVAILABLE":
+        st.warning(
+            "EARLY V3 RESEARCH BOARD: EPA ratings and reviewed QB scenarios are applied, "
+            "but current-week defensive PVAR is unavailable. These fair lines omit unknown "
+            "defensive injury effects; do not treat the listed edges as fully injury-adjusted."
+        )
+    elif status == "native_v3_fixed_225_plus_reviewed_qb":
+        st.success("Native V3 fixed 2.25 defensive PVAR and reviewed QB scenarios are applied.")
+    else:
+        st.info(f"Personnel source: {status}. Check this board's provenance before using its edges.")
 
 required_cols = {
     "matchup", "home_team", "away_team", "fair_home_spread_v3",
@@ -357,7 +364,7 @@ if market_status == "disabled_missing_week2_v3_pregame_snapshot":
     st.sidebar.write("V3.3 market signal: **OFF for Week 3** — missing preserved Week 2 V3 pregame snapshot")
 else:
     st.sidebar.write(f"V3.3 market signal status: **{market_status}**")
-st.sidebar.write("Personnel: **V2 bridge active** (temporary); native V3 PVAR remains in development")
+st.sidebar.write("Personnel: **" + str(raw_board["personnel_status"].iloc[0]) + "**" if "personnel_status" in raw_board else "Personnel: unknown")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     ["Market Board", "Game Detail", "Power Ratings", "Model Performance", "My Bets", "Early Injury Watch"]
