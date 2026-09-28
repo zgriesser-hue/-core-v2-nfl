@@ -1,0 +1,92 @@
+name: Build V3 weekly research board
+
+on:
+  schedule:
+    - cron: "45 14 * * 1,2"
+    - cron: "15 21 * * 3,4,5,6"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: NFL season
+        required: true
+        default: "2026"
+      week:
+        description: Week; blank resolves the active week
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: core-v2-repository-data-write
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TARGET_SEASON: ${{ inputs.season || '2026' }}
+      TARGET_WEEK: ${{ inputs.week }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e ".[test]"
+      - run: python -m pytest -q
+      - name: Resolve active week
+        shell: bash
+        run: |
+          if [ -z "$TARGET_WEEK" ]; then
+            TARGET_WEEK=$(python -m scripts.resolve_week --mode active --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" --floor-board current_live_board.csv)
+          fi
+          echo "TARGET_WEEK=$TARGET_WEEK" >> "$GITHUB_ENV"
+      - name: Refresh official injury and early availability inputs
+        shell: bash
+        run: |
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          OUTPUT_DIR="data/production/${TARGET_SEASON}/week_${WEEK_PADDED}"
+          python -m scripts.build_personnel \
+            --season "$TARGET_SEASON" --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --roles "data/model/player_role_priors_${TARGET_SEASON}.csv" \
+            --v2-role-repairs "data/model/player_role_repairs_v2_${TARGET_SEASON}.csv" \
+            --weekly-adjustments "data/model/weekly_team_adjustments_${TARGET_SEASON}.csv" \
+            --availability-ledger "data/model/early_availability_${TARGET_SEASON}.csv" \
+            --output-dir "$OUTPUT_DIR"
+      - name: Archive pregame V3 EPA history and build board
+        shell: bash
+        run: |
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          OUTPUT_DIR="data/production/${TARGET_SEASON}/week_${WEEK_PADDED}"
+          HISTORY="data/research/v3/team_game_efficiency_${TARGET_SEASON}.csv"
+          python -m scripts.build_v3_team_game_history \
+            --season "$TARGET_SEASON" --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --grades data/tracking/game_grades.csv --out "$HISTORY"
+          python -m scripts.build_v3_weekly_board \
+            --season "$TARGET_SEASON" --week "$TARGET_WEEK" \
+            --history "$HISTORY" \
+            --priors "data/research/v3/v3_preseason_priors_${TARGET_SEASON}.csv" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --coverage "$OUTPUT_DIR/report_coverage.csv" \
+            --audit "$OUTPUT_DIR/personnel_player_audit.csv" \
+            --ratings "data/model/v3_player_pvar_${TARGET_SEASON}.csv" \
+            --availability "data/model/early_availability_${TARGET_SEASON}.csv" \
+            --state-out "data/research/v3/week_${WEEK_PADDED}_v3_state.csv" \
+            --out "data/research/v3/week_${WEEK_PADDED}_v3_board.csv"
+          cp "data/research/v3/week_${WEEK_PADDED}_v3_board.csv" week_v3_board.csv
+      - name: Commit validated V3 research snapshot
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain -- data/research/v3 data/production week_v3_board.csv)" ]; then
+            echo "V3 snapshot unchanged"
+            exit 0
+          fi
+          git config user.name "core-v2-automation"
+          git config user.email "core-v2-automation@users.noreply.github.com"
+          git add data/research/v3 data/production week_v3_board.csv
+          git commit -m "data: refresh provisional V3 weekly board"
+          git push
