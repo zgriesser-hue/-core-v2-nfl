@@ -235,7 +235,14 @@ base_board = board_for_rebuild(raw_board)
 active_game_keys = select_pregame_game_keys(
     base_board, schedule=schedule, completed_game_keys=set()
 )
-base_board = base_board.loc[base_board["game_key"].astype(str).isin(active_game_keys)].copy()
+archived_board = not bool(active_game_keys)
+if archived_board:
+    st.info(
+        f"Showing the archived Week {active_week} V3 board. Live odds refresh is disabled "
+        "for completed games; market lines below are from the saved pregame board."
+    )
+else:
+    base_board = base_board.loc[base_board["game_key"].astype(str).isin(active_game_keys)].copy()
 
 for key in ["v3_live_lines", "v3_live_metadata", "v3_refresh_error"]:
     if key not in st.session_state:
@@ -248,20 +255,20 @@ with refresh_col:
     refresh_clicked = st.button(
         "\U0001f504 Refresh Live Spreads + Totals \u2014 2 API credits",
         type="primary",
-        disabled=not has_api_key,
+        disabled=not has_api_key or archived_board,
         use_container_width=True,
         help="Results are cached for 15 minutes. Shares the same API credit pool as Core V2's refresh button.",
     )
 with status_col:
-    if st.session_state.v3_live_metadata:
+    if st.session_state.v3_live_metadata and not archived_board:
         st.success(f"Live lines loaded: {st.session_state.v3_live_metadata.get('snapshot_timestamp')}")
     else:
-        st.caption("Displaying the repository snapshot. The refresh button is session-only.")
+        st.caption("Displaying the saved pregame snapshot." if archived_board else "Displaying the repository snapshot. The refresh button is session-only.")
 
 if not has_api_key:
     st.warning("Live refresh is disabled until PARLAY_API_KEY is added to this app's Secrets.")
 
-if refresh_clicked:
+if refresh_clicked and not archived_board:
     refresh_bucket = int(time.time() // 900)
     with st.spinner("Requesting and validating live spreads and totals..."):
         try:
@@ -280,7 +287,10 @@ if st.session_state.v3_refresh_error:
         + st.session_state.v3_refresh_error
     )
 
-current_lines = st.session_state.v3_live_lines if st.session_state.v3_live_lines is not None else static_lines
+current_lines = (
+    pd.DataFrame() if archived_board else
+    st.session_state.v3_live_lines if st.session_state.v3_live_lines is not None else static_lines
+)
 
 used_live_or_static_lines = not current_lines.empty
 
