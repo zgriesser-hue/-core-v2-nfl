@@ -125,47 +125,6 @@ def normalize_position_group(value: object) -> str:
     return _POSITION_GROUP_MAP.get(position,"OTHER")
 
 def attach_player_pvar_to_audit(audit: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFrame:
-    """Attach authoritative 2026 rebased PVAR; GSIS first, exact name+team fallback."""
-    if audit is None:
-        return audit
-    out = audit.copy()
-    required = {"gsis_id", "player_name", "team", "pvar_rating_rebased"}
-    missing = required - set(ratings.columns)
-    if missing:
-        raise ValueError(f"PVAR ratings missing required columns: {sorted(missing)}")
-
-    r = ratings.copy()
-    r["pvar_rating_rebased"] = pd.to_numeric(r["pvar_rating_rebased"], errors="coerce")
-    by_id = r.dropna(subset=["gsis_id"]).drop_duplicates("gsis_id", keep=False)
-    id_map = by_id.set_index("gsis_id")["pvar_rating_rebased"]
-
-    out["pvar_rating_rebased"] = out.get("gsis_id", pd.Series(pd.NA, index=out.index)).map(id_map)
-    out["pvar_resolution_method"] = np.where(out["pvar_rating_rebased"].notna(), "gsis_id", "unresolved")
-
-    # Exact, unique name+team fallback only; never fuzzy-match player value.
-    keys = ["player_name", "team"]
-    unique_name_team = (
-        r.dropna(subset=["player_name", "team"])
-         .groupby(keys, dropna=False)
-         .filter(lambda g: len(g) == 1)
-         .set_index(keys)["pvar_rating_rebased"]
-    )
-    unresolved = out["pvar_rating_rebased"].isna()
-    if unresolved.any():
-        fallback_keys = pd.MultiIndex.from_frame(out.loc[unresolved, keys])
-        fallback = pd.Series(fallback_keys.map(unique_name_team), index=out.index[unresolved])
-        hit = fallback.notna()
-        out.loc[fallback.index[hit], "pvar_rating_rebased"] = fallback.loc[hit].to_numpy()
-        out.loc[fallback.index[hit], "pvar_resolution_method"] = "exact_name_team"
-
-    out["loss_pvar"] = (
-        pd.to_numeric(out.get("status_weight"), errors="coerce")
-        * pd.to_numeric(out["pvar_rating_rebased"], errors="coerce")
-    )
-    return out
-
-
-def attach_player_pvar_to_audit(audit: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFrame:
     """Attach authoritative 2026 Stage-2i PVAR values to the weekly audit by GSIS ID."""
     required = {"gsis_id", "pvar_rating_rebased", "pvar_rating_role_only", "pvar_confidence"}
     missing = required - set(ratings.columns)
@@ -218,13 +177,13 @@ def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=columns)
 
-    required = {"status_weight", "pvar_rating_rebased"}
+    required = {"status_weight", "pvar_production"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Native V3 personnel audit missing PVAR inputs: {sorted(missing)}")
 
     df["_status_weight"] = pd.to_numeric(df["status_weight"], errors="coerce")
-    df["_pvar"] = pd.to_numeric(df["pvar_rating_rebased"], errors="coerce")
+    df["_pvar"] = pd.to_numeric(df["pvar_production"], errors="coerce")
     unresolved = df["_status_weight"].isna() | df["_pvar"].isna() | df["gsis_id"].isna()
     if unresolved.any():
         names = df.loc[unresolved, ["team", "player_name"]].astype(str).agg(" ".join, axis=1).tolist()
