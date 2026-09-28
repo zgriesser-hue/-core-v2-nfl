@@ -37,7 +37,7 @@ def test_early_board_shows_qb_scenario_but_unknown_defensive_pvar():
     coverage = pd.DataFrame([dict(team="A", report_available=False), dict(team="B", report_available=False)])
     availability = pd.DataFrame([dict(team="B", position_group="QB", assessment="PROVISIONAL_QB",
                                       adjustment_points=-1.5)])
-    board, state = build_week(pd.DataFrame(columns=["season", "week", "team", "plays", "epa_per_play", "def_epa_per_play"]),
+    board, state = build_week(pd.DataFrame(columns=["season", "week", "game_id", "team", "plays", "epa_per_play", "def_epa_per_play"]),
                               priors, schedule, coverage, pd.DataFrame(), pd.DataFrame(), availability, 2026, 4)
     row = board.iloc[0]
     assert row.persistent_margin == -1.
