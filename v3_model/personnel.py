@@ -125,13 +125,16 @@ def normalize_position_group(value: object) -> str:
     return _POSITION_GROUP_MAP.get(position,"OTHER")
 
 def attach_player_pvar_to_audit(audit: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFrame:
-    """Attach authoritative 2026 Stage-2i PVAR values to the weekly audit by GSIS ID."""
+    """Attach the frozen production PVAR snapshot to the weekly audit by GSIS ID."""
     required = {"gsis_id", "pvar_production", "pvar_source"}
     missing = required - set(ratings.columns)
     if missing:
         raise ValueError(f"V3 PVAR ratings missing columns: {sorted(missing)}")
 
     out = audit.copy()
+    if "gsis_id" not in out.columns:
+        raise ValueError("Native V3 personnel audit is missing gsis_id.")
+
     out["gsis_id"] = out["gsis_id"].astype("string")
     values = ratings.copy()
     values["gsis_id"] = values["gsis_id"].astype("string")
@@ -140,10 +143,22 @@ def attach_player_pvar_to_audit(audit: pd.DataFrame, ratings: pd.DataFrame) -> p
         dupes = sorted(values.loc[values["gsis_id"].duplicated(False), "gsis_id"].unique())
         raise ValueError(f"V3 PVAR ratings contain duplicate GSIS IDs: {dupes[:10]}")
 
-    keep = ["gsis_id", "pvar_production", "pvar_source"]
+    optional = [
+        "pvar_rating_rebased", "pvar_rating_v2", "pvar_rating_role_only",
+        "pvar_confidence", "no_history_pvar_prior", "position",
+        "depth_rank", "top2",
+    ]
+    keep = ["gsis_id", "pvar_production", "pvar_source"] + [
+        col for col in optional if col in values.columns
+    ]
     out = out.merge(values[keep], on="gsis_id", how="left", validate="many_to_one")
-    out["pvar_rating_rebased"] = pd.to_numeric(out["pvar_rating_rebased"], errors="coerce")
-    out["pvar_rating_role_only"] = pd.to_numeric(out["pvar_rating_role_only"], errors="coerce")
+
+    for col in (
+        "pvar_production", "pvar_rating_rebased", "pvar_rating_v2",
+        "pvar_rating_role_only", "no_history_pvar_prior",
+    ):
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
     return out
 
 
