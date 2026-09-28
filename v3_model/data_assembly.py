@@ -75,6 +75,7 @@ def build_matchups(
     week: int,
     market_signal_table: pd.DataFrame | None = None,
     personnel_audit: pd.DataFrame | None = None,
+    personnel_covered_teams: set[str] | None = None,
 ) -> pd.DataFrame:
     """
     Build the `matchups` DataFrame predict_2026.predict_week expects
@@ -137,7 +138,7 @@ def build_matchups(
     # Native V3 personnel input. The weekly player audit is aggregated to
     # defensive exposure only; QB/offense remain separate model components.
     if personnel_audit is not None:
-        wk = personnel.add_personnel_to_matchups(wk, personnel_audit)
+        wk = personnel.add_personnel_to_matchups(wk, personnel_audit, covered_teams=personnel_covered_teams)
     else:
         wk["home_def_loss"] = 0.0
         wk["away_def_loss"] = 0.0
