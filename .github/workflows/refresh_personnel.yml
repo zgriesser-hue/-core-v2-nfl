@@ -17,7 +17,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: core-v2-personnel-refresh
+  group: core-v2-repository-data-write
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "$TARGET_WEEK" ]; then
-            TARGET_WEEK=$(python -m scripts.resolve_week --mode active --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv")
+            TARGET_WEEK=$(python -m scripts.resolve_week --mode active --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" --floor-board current_live_board.csv)
           fi
           echo "TARGET_WEEK=$TARGET_WEEK" >> "$GITHUB_ENV"
           WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
@@ -69,6 +69,11 @@ jobs:
         shell: bash
         run: |
           WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          LIVE_WEEK=$(python -c 'import pandas as pd; d=pd.read_csv("current_live_board.csv",usecols=["season","week"]); d=d[pd.to_numeric(d.season,errors="coerce").eq(int(__import__("os").environ["TARGET_SEASON"]))]; print(int(pd.to_numeric(d.week).max()) if not d.empty else 0)')
+          if [ "$TARGET_WEEK" -lt "$LIVE_WEEK" ]; then
+            echo "Skipping stale week $TARGET_WEEK; live board is already week $LIVE_WEEK"
+            exit 0
+          fi
           CANDIDATE_BOARD="data/production/${TARGET_SEASON}/week_${WEEK_PADDED}/candidate_dashboard.csv"
           python -m scripts.publish_week \
             --season "$TARGET_SEASON" \
