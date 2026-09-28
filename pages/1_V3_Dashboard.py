@@ -336,7 +336,9 @@ else:
     st.sidebar.write(f"V3.3 market signal status: **{market_status}**")
 st.sidebar.write("Personnel: **V2 bridge active** (temporary); native V3 PVAR remains in development")
 
-tab1, tab2, tab3 = st.tabs(["Market Board", "Game Detail", "My Bets"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["Market Board", "Game Detail", "Power Ratings", "Model Performance", "My Bets"]
+)
 
 with tab1:
     filtered = board.loc[board["edge_points"] >= minimum_edge].copy()
@@ -395,176 +397,101 @@ with tab2:
         )
 
 with tab3:
-    st.subheader("My Bets (V3)")
-    st.caption(
-        "Record actual V3 spread bets here. New entries snapshot the V3 fair line "
-        "and market consensus currently displayed above; later refreshes do not "
-        "rewrite that decision-time snapshot. This ledger and its grades are "
-        "separate from Core V2's My Bets tab - see this file's own docstring."
-    )
+    st.subheader("V3 Power Ratings")
+    st.caption("Pregame V3 team strength entering this week. Higher is better; centered at league average.")
+    teams = sorted(set(raw_board["away_team"]).union(set(raw_board["home_team"])))
+    # Reconstruct the overall pregame strength directly from the matchup
+    # equations: persistent_margin = home_strength - away_strength.
+    equations=[]
+    values=[]
+    for row in raw_board.itertuples(index=False):
+        x={team:0.0 for team in teams}
+        x[str(row.home_team)]=1.0
+        x[str(row.away_team)]=-1.0
+        equations.append([x[t] for t in teams])
+        values.append(float(row.persistent_margin))
+    # Add a zero-sum centering equation; it changes only the arbitrary level,
+    # never any matchup difference.
+    import numpy as np
+    A=np.asarray(equations+[([1.0]*len(teams))],dtype=float)
+    y=np.asarray(values+[0.0],dtype=float)
+    ratings, *_=np.linalg.lstsq(A,y,rcond=None)
+    rating_df=pd.DataFrame({"Team":teams,"V3 Power Rating":ratings}).sort_values("V3 Power Rating",ascending=False)
+    rating_df["V3 Power Rating"]=rating_df["V3 Power Rating"].round(2)
+    st.dataframe(rating_df,use_container_width=True,hide_index=True)
+    st.caption("These are relative overall team-strength ratings reconstructed from V3's saved pregame state; HFA, personnel, market and neutral-site adjustments are not included.")
 
-    bets_path_v3 = ROOT / "data" / "tracking" / "my_bets_v3.csv"
-    bets_v3 = bet_tracking.load_bets(bets_path_v3)
-
+with tab4:
+    st.subheader("V3 Model Performance")
     v3_grades_path = locate_file("v3_game_grades.csv") or locate_file("data/tracking/v3_game_grades.csv")
     v3_game_grades = load_csv(str(v3_grades_path)) if v3_grades_path else pd.DataFrame()
-
-    bet_game_v3 = st.selectbox(
-        "Game", board["matchup"].tolist() if "matchup" in board.columns
-        else (board["away_team"] + " @ " + board["home_team"]).tolist(),
-        key="v3_bet_game",
-    )
-    bet_row_v3 = board.loc[
-        (board["matchup"] if "matchup" in board.columns else board["away_team"] + " @ " + board["home_team"]).eq(bet_game_v3)
-    ].iloc[0]
-
-    with st.form("enter_v3_bet", clear_on_submit=False):
-        bet_team_v3 = st.selectbox(
-            "Team",
-            [str(bet_row_v3["away_team"]), str(bet_row_v3["home_team"])],
-            key=f"v3_bet_team_{bet_game_v3}",
-        )
-        b1, b2, b3 = st.columns(3)
-        bet_spread_v3 = b1.number_input("Spread", value=0.0, step=0.5, format="%.1f", key="v3_bet_spread")
-        bet_odds_v3 = b2.number_input("American odds", value=-110, step=1, key="v3_bet_odds")
-        bet_stake_v3 = b3.number_input("Stake ($)", min_value=0.0, value=25.0, step=5.0, key="v3_bet_stake")
-        sportsbook_v3 = st.text_input("Sportsbook", value="bet365", key="v3_bet_book")
-        notes_v3 = st.text_input("Notes", value="", key="v3_bet_notes")
-        submitted_v3 = st.form_submit_button("Save bet")
-
-        if submitted_v3:
-            entered_at_v3 = pd.Timestamp.now(tz="UTC").isoformat()
-            try:
-                game_id_value_v3 = str(
-                    bet_row_v3.get(
-                        "game_id",
-                        f"{active_season}_{active_week:02d}_{bet_row_v3['away_team']}_{bet_row_v3['home_team']}",
-                    )
-                )
-                # fair_display/market_display (computed above) are bookmaker
-                # convention - the ONLY correct input to bet_tracking here.
-                # fair_home_spread_v3/market_home_spread are margin convention
-                # and must never be passed to bet_tracking directly.
-                selected_model_spread_v3 = bet_tracking.selected_team_model_spread(
-                    bet_team_v3,
-                    str(bet_row_v3["away_team"]),
-                    str(bet_row_v3["home_team"]),
-                    float(bet_row_v3["fair_display"]),
-                )
-                bet_vs_model_points_v3, bet_alignment_v3 = bet_tracking.classify_bet_alignment(
-                    float(bet_spread_v3),
-                    selected_model_spread_v3,
-                )
-                bets_v3 = bet_tracking.append_bet(
-                    bets_path_v3,
-                    {
-                        "season": int(active_season),
-                        "week": int(active_week),
-                        "game_id": game_id_value_v3,
-                        "matchup": bet_game_v3,
-                        "team": bet_team_v3,
-                        "bet_spread": float(bet_spread_v3),
-                        "odds_american": int(bet_odds_v3),
-                        "sportsbook": sportsbook_v3.strip(),
-                        "stake": float(bet_stake_v3),
-                        "entered_at_utc": entered_at_v3,
-                        "model_fair_home_spread_at_entry": float(bet_row_v3["fair_display"]),
-                        "market_home_spread_at_entry": (
-                            float(bet_row_v3["market_display"]) if pd.notna(bet_row_v3["market_display"]) else pd.NA
-                        ),
-                        "model_side_at_entry": str(bet_row_v3.get("model_side", "")),
-                        "model_edge_points_at_entry": (
-                            float(bet_row_v3["edge_points"]) if pd.notna(bet_row_v3["edge_points"]) else pd.NA
-                        ),
-                        "model_selected_team_spread_at_entry": selected_model_spread_v3,
-                        "bet_vs_model_points": bet_vs_model_points_v3,
-                        "bet_alignment": bet_alignment_v3,
-                        "status": "OPEN",
-                        "notes": notes_v3.strip(),
-                    },
-                )
-                st.success(
-                    f"Saved {bet_team_v3} {format_spread(float(bet_spread_v3))} "
-                    f"{format_american(int(bet_odds_v3))} at {sportsbook_v3.strip()}."
-                )
-            except OSError:
-                st.error(
-                    "This deployment cannot write persistent files. Download the ledger below "
-                    "and commit it to data/tracking/my_bets_v3.csv, or enter the bet from a writable deployment."
-                )
-
-    if bets_v3.empty:
-        st.info("No V3 bets recorded yet.")
+    if v3_game_grades.empty:
+        st.info("No V3 games have been graded yet. V3 performance will populate once V3 release snapshots are being graded.")
     else:
-        display_bets_v3 = bet_tracking.grade_bets_against_closes(bets_v3, v3_game_grades)
-        display_bets_v3["Bet"] = display_bets_v3.apply(
-            lambda row: f"{row['team']} {format_spread(float(row['bet_spread']))} "
-            f"{format_american(float(row['odds_american']))}",
-            axis=1,
-        )
-        display_bets_v3["Stake"] = pd.to_numeric(display_bets_v3["stake"], errors="coerce").map(
-            lambda value: f"USD {value:.2f}" if pd.notna(value) else "\u2014"
-        )
-        display_bets_v3["Entered"] = display_bets_v3["entered_at_utc"].map(display_timestamp)
-        display_bets_v3["Model at entry"] = display_bets_v3["model_fair_home_spread_at_entry"].map(
-            lambda value: f"{float(value):+.2f}" if pd.notna(value) else "Legacy / unavailable"
-        )
-        display_bets_v3["Market at entry"] = display_bets_v3["market_home_spread_at_entry"].map(
-            lambda value: f"{float(value):+.1f}" if pd.notna(value) else "Legacy / unavailable"
-        )
-        display_bets_v3["V3 bet-side fair"] = pd.to_numeric(
-            display_bets_v3["model_selected_team_spread_at_entry"], errors="coerce"
-        ).map(lambda value: format_spread(value) if pd.notna(value) else "\u2014")
-        display_bets_v3["Vs model"] = pd.to_numeric(
-            display_bets_v3["bet_vs_model_points"], errors="coerce"
-        ).map(lambda value: f"{value:+.2f} pts" if pd.notna(value) else "\u2014")
-        display_bets_v3["Alignment"] = display_bets_v3["bet_alignment"].map(
-            {"WITH_MODEL": "With model", "AGAINST_MODEL": "Against model", "NEUTRAL": "Neutral"}
-        ).fillna("\u2014")
-        display_bets_v3["Close"] = pd.to_numeric(
-            display_bets_v3["closing_selected_team_spread"], errors="coerce"
-        ).map(lambda value: format_spread(value) if pd.notna(value) else "Pending")
-        display_bets_v3["Actual bet CLV"] = pd.to_numeric(
-            display_bets_v3["actual_bet_clv_points"], errors="coerce"
-        ).map(lambda value: f"{value:+.1f} pts" if pd.notna(value) else "Pending")
-        display_bets_v3["Result"] = display_bets_v3["actual_bet_result"].fillna("Pending")
-        display_bets_v3["P/L"] = pd.to_numeric(
-            display_bets_v3["profit_loss"], errors="coerce"
-        ).map(lambda value: f"USD {value:+.2f}" if pd.notna(value) else "Pending")
-        st.dataframe(
-            display_bets_v3[
-                ["week", "matchup", "Bet", "sportsbook", "Stake", "Entered",
-                 "V3 bet-side fair", "Vs model", "Alignment",
-                 "Close", "Actual bet CLV", "Result", "P/L",
-                 "Model at entry", "Market at entry", "status"]
-            ].rename(
-                columns={"week": "Week", "matchup": "Matchup", "sportsbook": "Book", "status": "Status"}
-            ).sort_values(["Week", "Entered"], ascending=[False, False]),
-            use_container_width=True,
-            hide_index=True,
-        )
+        g=v3_game_grades.copy()
+        actual=pd.to_numeric(g.get("actual_home_margin"),errors="coerce")
+        pred=pd.to_numeric(g.get("fair_home_spread"),errors="coerce")
+        close=pd.to_numeric(g.get("closing_home_spread"),errors="coerce")
+        valid=actual.notna() & pred.notna()
+        mae=(actual[valid]-pred[valid]).abs().mean() if valid.any() else float("nan")
+        close_valid=close.notna() & pred.notna()
+        avg_clv=(close[close_valid]-pred[close_valid]).abs().mean() if close_valid.any() else float("nan")
+        m1,m2,m3=st.columns(3)
+        m1.metric("Games graded",int(valid.sum()))
+        m2.metric("V3 MAE",f"{mae:.2f}" if pd.notna(mae) else "—")
+        m3.metric("Games with close",int(close_valid.sum()))
+        cols=[x for x in ["week","matchup","fair_home_spread","closing_home_spread","away_score","home_score"] if x in g.columns]
+        st.dataframe(g[cols].sort_values("week",ascending=False),use_container_width=True,hide_index=True)
 
-        total_staked_v3 = pd.to_numeric(bets_v3["stake"], errors="coerce").sum()
-        graded_actual_v3 = display_bets_v3.loc[display_bets_v3["actual_bet_result"].isin(["Win", "Loss", "Push"])].copy()
-        actual_wins_v3 = int(graded_actual_v3["actual_bet_result"].eq("Win").sum())
-        actual_losses_v3 = int(graded_actual_v3["actual_bet_result"].eq("Loss").sum())
-        actual_pushes_v3 = int(graded_actual_v3["actual_bet_result"].eq("Push").sum())
-        clv_rows_v3 = pd.to_numeric(display_bets_v3["actual_bet_clv_points"], errors="coerce").dropna()
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Tracked stake", f"USD {total_staked_v3:.2f}")
-        m2.metric("Actual bet record", f"{actual_wins_v3}-{actual_losses_v3}-{actual_pushes_v3}")
-        m3.metric("Avg actual bet CLV", f"{clv_rows_v3.mean():+.2f} pts" if not clv_rows_v3.empty else "Pending")
-        total_pnl_v3 = pd.to_numeric(graded_actual_v3["profit_loss"], errors="coerce").sum()
-        m4.metric("Actual bet P/L", f"USD {total_pnl_v3:+.2f}" if not graded_actual_v3.empty else "Pending")
-        st.download_button(
-            "Download V3 bet ledger CSV",
-            data=bets_v3.to_csv(index=False).encode("utf-8"),
-            file_name="my_bets_v3.csv",
-            mime="text/csv",
-        )
-
+with tab5:
+    st.subheader("My Bets — V3 View")
     st.caption(
-        "Actual bet CLV is separate from model-to-close tracking. It compares the exact spread you "
-        "bet with the automated pre-kickoff consensus close from the bettor's perspective; positive "
-        "means you beat the close. If the close was not captured, it stays blank rather than being backfilled."
+        "This is the same permanent wager ledger used by Core V2. "
+        "V3 labels each spread bet by whether the price you took was backed by V3 at the current archived fair line."
     )
+    bets_path_v3 = ROOT / "data" / "tracking" / "my_bets.csv"
+    bets_v3 = bet_tracking.load_bets(bets_path_v3)
+    shared_grades_path = locate_file("game_grades.csv") or locate_file("data/tracking/game_grades.csv")
+    shared_grades = load_csv(str(shared_grades_path)) if shared_grades_path else pd.DataFrame()
+    if bets_v3.empty:
+        st.info("No bets recorded yet.")
+    else:
+        display_bets_v3=bet_tracking.grade_bets_against_closes(bets_v3,shared_grades)
+        fair_map=dict(zip(raw_board["matchup"],-pd.to_numeric(raw_board["fair_home_spread_v3"],errors="coerce")))
+        away_map=dict(zip(raw_board["matchup"],raw_board["away_team"]))
+        home_map=dict(zip(raw_board["matchup"],raw_board["home_team"]))
+        def v3_backing(row):
+            typ=str(row.get("bet_type","SPREAD")).upper()
+            if typ!="SPREAD": return "N/A — no V3 ML/total model"
+            matchup=str(row["matchup"])
+            if matchup not in fair_map or pd.isna(fair_map[matchup]): return "Unavailable"
+            team=str(row.get("selection") or row.get("team"))
+            try:
+                model_side=bet_tracking.selected_team_model_spread(team,str(away_map[matchup]),str(home_map[matchup]),float(fair_map[matchup]))
+                _,alignment=bet_tracking.classify_bet_alignment(float(row["bet_line"]),model_side)
+                return {"WITH_MODEL":"Backed by V3","AGAINST_MODEL":"Not backed by V3","NEUTRAL":"Neutral vs V3"}.get(alignment,"Unavailable")
+            except Exception:
+                return "Unavailable"
+        display_bets_v3["V3 backing"]=display_bets_v3.apply(v3_backing,axis=1)
+        def bet_label(row):
+            typ=str(row.get("bet_type","SPREAD")).upper()
+            if typ=="MONEYLINE": return f"{row['selection']} ML {format_american(float(row['odds_american']))}"
+            if typ=="TOTAL": return f"{str(row['selection']).title()} {float(row['bet_line']):.1f} {format_american(float(row['odds_american']))}"
+            return f"{row['selection']} {format_spread(float(row['bet_line']))} {format_american(float(row['odds_american']))}"
+        display_bets_v3["Bet"]=display_bets_v3.apply(bet_label,axis=1)
+        display_bets_v3["Stake"]=pd.to_numeric(display_bets_v3["stake"],errors="coerce").map(lambda x:f"USD {x:.2f}")
+        display_bets_v3["Result"]=display_bets_v3["actual_bet_result"].fillna("Pending")
+        display_bets_v3["P/L"]=pd.to_numeric(display_bets_v3["profit_loss"],errors="coerce").map(lambda x:f"USD {x:+.2f}" if pd.notna(x) else "Pending")
+        st.dataframe(
+            display_bets_v3[["week","matchup","bet_type","Bet","sportsbook","Stake","V3 backing","Result","P/L"]]
+            .rename(columns={"week":"Week","matchup":"Matchup","bet_type":"Type","sportsbook":"Book"})
+            .sort_values("Week",ascending=False),
+            use_container_width=True,hide_index=True
+        )
+        summary=bet_tracking.summarize_bets(display_bets_v3)
+        overall=summary.loc[summary["bet_type"].eq("OVERALL")].iloc[0]
+        m1,m2,m3=st.columns(3)
+        m1.metric("Overall record",f"{int(overall['wins'])}-{int(overall['losses'])}-{int(overall['pushes'])}")
+        m2.metric("Gain / loss",f"USD {overall['profit_loss']:+.2f}")
+        backed=display_bets_v3["V3 backing"].eq("Backed by V3").sum()
+        m3.metric("Spread bets backed by V3",int(backed))
