@@ -97,3 +97,72 @@ def fit_personnel_adjustment(
         )
 
     return PersonnelCalibration(threshold=threshold, adjustment_points=coefficient)
+
+
+_POSITION_GROUP_MAP = {"C":"OL","G":"OL","OG":"OL","OL":"OL","OT":"OL","T":"OL","WR":"WR_TE","TE":"WR_TE","RB":"RB","FB":"RB","EDGE":"EDGE","DE":"EDGE","IDL":"IDL","DT":"IDL","NT":"IDL","LB":"LB","ILB":"LB","OLB":"LB","CB":"DB","DB":"DB","S":"DB","FS":"DB","SS":"DB","K":"ST","P":"ST","LS":"ST","QB":"QB"}
+DEFENSIVE_POSITION_GROUPS=frozenset({"EDGE","IDL","LB","DB"})
+
+def normalize_position_group(value: object) -> str:
+    position=str(value).upper().strip()
+    if not position or position=="NAN":
+        return "OTHER"
+    return _POSITION_GROUP_MAP.get(position,"OTHER")
+
+def defensive_exposure_from_audit(audit: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate the weekly player audit into native V3 defensive features."""
+    columns=["team","def_loss_pvar","def_max_player_loss","def_high_role_count","def_edge_loss","def_idl_loss","def_lb_loss","def_db_loss","personnel_players_observed"]
+    if audit is None or audit.empty:
+        return pd.DataFrame(columns=columns)
+    df=audit.copy()
+    pos_source="position_group" if "position_group" in df.columns else ("matched_position" if "matched_position" in df.columns else "position_reported")
+    df["_group"]=df[pos_source].map(normalize_position_group)
+    eligible=df["v2_shadow_eligible"].fillna(False).astype(bool) if "v2_shadow_eligible" in df.columns else pd.Series(True,index=df.index)
+    df=df.loc[df["_group"].isin(DEFENSIVE_POSITION_GROUPS) & eligible].copy()
+    exposure_col="weighted_role_exposure_v2" if "weighted_role_exposure_v2" in df.columns else "weighted_role_exposure"
+    df["_exposure"]=pd.to_numeric(df[exposure_col],errors="coerce").fillna(0.0).clip(lower=0.0)
+    rows=[]
+    for team,g in df.groupby("team",dropna=False):
+        rec={"team":team,"def_loss_pvar":float(g["_exposure"].sum()),"def_max_player_loss":float(g["_exposure"].max()) if len(g) else 0.0,"def_high_role_count":int((g["_exposure"]>=0.50).sum()),"personnel_players_observed":int(len(g))}
+        for group,col in [("EDGE","def_edge_loss"),("IDL","def_idl_loss"),("LB","def_lb_loss"),("DB","def_db_loss")]:
+            rec[col]=float(g.loc[g["_group"].eq(group),"_exposure"].sum())
+        rows.append(rec)
+    return pd.DataFrame(rows,columns=columns)
+
+def add_personnel_to_matchups(matchups: pd.DataFrame, audit: pd.DataFrame) -> pd.DataFrame:
+    """Join native defensive exposure features to a weekly matchup table."""
+    out=matchups.copy()
+    team=defensive_exposure_from_audit(audit)
+    feature_cols=[c for c in team.columns if c!="team"]
+    for side in ("home","away"):
+        renamed=team.rename(columns={"team":f"{side}_team",**{c:f"{side}_{c}" for c in feature_cols}})
+        out=out.merge(renamed,on=f"{side}_team",how="left")
+        for col in feature_cols:
+            out[f"{side}_{col}"]=pd.to_numeric(out[f"{side}_{col}"],errors="coerce").fillna(0.0)
+        observed=out[f"{side}_personnel_players_observed"].gt(0)
+        out[f"{side}_personnel_provenance"]=np.where(observed,"player_audit_native_v3","player_audit_no_defensive_losses")
+        out[f"{side}_def_loss"]=out[f"{side}_def_loss_pvar"]
+    return out
+
+@dataclass(frozen=True)
+class ThresholdCalibrationCheck:
+    n:int
+    observed_flag_rate:float
+    intended_flag_rate:float
+    ci_lower:float
+    ci_upper:float
+    @property
+    def intended_rate_within_ci(self)->bool:
+        return self.n>0 and self.ci_lower <= self.intended_flag_rate <= self.ci_upper
+
+def check_threshold_calibration(losses: pd.Series, threshold: float, intended_flag_rate: float=0.10) -> ThresholdCalibrationCheck:
+    """Wilson 95% interval for live major-loss frequency; safe for empty input."""
+    clean=pd.to_numeric(losses,errors="coerce").dropna()
+    n=int(len(clean))
+    if n==0:
+        return ThresholdCalibrationCheck(0,float("nan"),intended_flag_rate,float("nan"),float("nan"))
+    p=float((clean>threshold).mean())
+    z=1.959963984540054
+    denom=1.0+z*z/n
+    center=(p+z*z/(2*n))/denom
+    half=z*np.sqrt((p*(1-p)/n)+(z*z/(4*n*n)))/denom
+    return ThresholdCalibrationCheck(n,p,intended_flag_rate,max(0.0,center-half),min(1.0,center+half))
