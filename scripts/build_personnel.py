@@ -15,6 +15,7 @@ from core_v2.personnel import (
 )
 from core_v2.personnel_v2 import build_personnel_v2_shadow, load_v2_role_repairs
 from core_v2.projections import load_week_schedule
+from v3_model.personnel import attach_player_pvar_to_audit
 
 
 def main() -> None:
@@ -25,6 +26,7 @@ def main() -> None:
     parser.add_argument("--roles", type=Path, required=True)
     parser.add_argument("--weekly-adjustments", type=Path)
     parser.add_argument("--v2-role-repairs", type=Path)
+    parser.add_argument("--v3-pvar-ratings", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
@@ -58,6 +60,9 @@ def main() -> None:
     shadow, audit = build_personnel_v2_shadow(
         schedule, audit, args.season, args.week, v2_repairs
     )
+    if args.v3_pvar_ratings is not None:
+        ratings = pd.read_csv(args.v3_pvar_ratings, dtype={"gsis_id": "string"})
+        audit = attach_player_pvar_to_audit(audit, ratings)
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
