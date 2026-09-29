@@ -7,11 +7,13 @@ on:
       - "scripts/build_v3_*.py"
       - ".github/workflows/v3_weekly_board.yml"
       - "pages/1_V3_Dashboard.py"
+      - "data/model/early_availability_*.csv"
   pull_request:
     paths:
       - "scripts/build_v3_*.py"
       - ".github/workflows/v3_weekly_board.yml"
       - "pages/1_V3_Dashboard.py"
+      - "data/model/early_availability_*.csv"
   schedule:
     - cron: "45 14 * * 1,2"
     - cron: "15 21 * * 3,4,5,6"
