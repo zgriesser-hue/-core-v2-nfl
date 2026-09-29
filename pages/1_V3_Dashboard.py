@@ -393,6 +393,7 @@ with tab1:
             ),
             "Lean": filtered["model_side"],
             "Edge (pts)": filtered["edge_points"].round(2),
+            "QB availability": filtered["qb_availability_notes"].fillna("") if "qb_availability_notes" in filtered else "",
         }
     )
 
@@ -460,25 +461,52 @@ with tab3:
 
 with tab4:
     st.subheader("V3 Model Performance")
-    v3_grades_path = locate_file("v3_game_grades.csv") or locate_file("data/tracking/v3_game_grades.csv")
-    v3_game_grades = load_csv(str(v3_grades_path)) if v3_grades_path else pd.DataFrame()
-    if v3_game_grades.empty:
-        st.info("No V3 games have been graded yet. V3 performance will populate once V3 release snapshots are being graded.")
+    st.caption("Scores are matched to archived pregame V3 boards. V3 fair margins use positive = home favored.")
+    shared_grades_path = ROOT / "data" / "tracking" / "game_grades.csv"
+    archived_paths = sorted((ROOT / "data" / "research" / "v3").glob("week_*_v3_board.csv"))
+    archived = [load_csv(str(path), path.stat().st_mtime_ns) for path in archived_paths]
+    archived = [frame for frame in archived if {"game_key", "fair_home_spread_v3"}.issubset(frame.columns)]
+    if not shared_grades_path.exists() or not archived:
+        st.info("No archived V3 projections and completed game scores are available yet.")
     else:
-        g=v3_game_grades.copy()
-        actual=pd.to_numeric(g.get("actual_home_margin"),errors="coerce")
-        pred=pd.to_numeric(g.get("fair_home_spread"),errors="coerce")
-        close=pd.to_numeric(g.get("closing_home_spread"),errors="coerce")
-        valid=actual.notna() & pred.notna()
-        mae=(actual[valid]-pred[valid]).abs().mean() if valid.any() else float("nan")
-        close_valid=close.notna() & pred.notna()
-        avg_clv=(close[close_valid]-pred[close_valid]).abs().mean() if close_valid.any() else float("nan")
-        m1,m2,m3=st.columns(3)
-        m1.metric("Games graded",int(valid.sum()))
-        m2.metric("V3 MAE",f"{mae:.2f}" if pd.notna(mae) else "—")
-        m3.metric("Games with close",int(close_valid.sum()))
-        cols=[x for x in ["week","matchup","fair_home_spread","closing_home_spread","away_score","home_score"] if x in g.columns]
-        st.dataframe(g[cols].sort_values("week",ascending=False),use_container_width=True,hide_index=True)
+        outcomes = load_csv(str(shared_grades_path), shared_grades_path.stat().st_mtime_ns)
+        archive = pd.concat(archived, ignore_index=True)
+        if archive["game_key"].duplicated().any():
+            st.error("Duplicate games in V3 pregame archives; performance cannot be graded safely.")
+        else:
+            completed = outcomes[["game_key", "away_score", "home_score", "actual_home_margin"]].copy()
+            completed = completed.loc[completed["away_score"].notna() & completed["home_score"].notna()]
+            if completed["game_key"].duplicated().any():
+                st.error("Duplicate graded games; performance cannot be graded safely.")
+            else:
+                g = archive.merge(completed, on="game_key", how="inner", validate="one_to_one")
+                g["fair_home_spread_v3"] = pd.to_numeric(g["fair_home_spread_v3"], errors="coerce")
+                g["actual_home_margin"] = pd.to_numeric(g["actual_home_margin"], errors="coerce")
+                g = g.dropna(subset=["fair_home_spread_v3", "actual_home_margin"])
+                if g.empty:
+                    st.info("No archived V3 games have final scores yet.")
+                else:
+                    g["absolute_error"] = (g["actual_home_margin"] - g["fair_home_spread_v3"]).abs()
+                    m1, m2 = st.columns(2)
+                    m1.metric("Games graded", len(g))
+                    m2.metric("V3 MAE", f'{g["absolute_error"].mean():.2f}')
+                    g["V3 fair"] = g.apply(
+                        lambda row: display_home_line(row["away_team"], row["home_team"],
+                                                      -row["fair_home_spread_v3"]), axis=1
+                    )
+                    g["Final"] = g.apply(
+                        lambda row: f'{row["away_team"]} {int(row["away_score"])} – '
+                                    f'{row["home_team"]} {int(row["home_score"])}', axis=1
+                    )
+                    g["Abs error"] = g["absolute_error"].round(2)
+                    st.dataframe(
+                        g.rename(columns={"week": "Week", "matchup": "Matchup"})[
+                            ["Week", "Matchup", "V3 fair", "Final", "Abs error"]
+                        ].sort_values("Week", ascending=False),
+                        use_container_width=True, hide_index=True,
+                    )
+                    st.caption("This grades the saved V3 fair line against the final margin. "
+                               "A missing closing line does not block score grading.")
 
 with tab5:
     st.subheader("My Bets — V3 View")
