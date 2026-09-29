@@ -1,14 +1,14 @@
 season,week,game_id,away_team,home_team,personnel_correction_current_clean,personnel_correction_min_clean,personnel_correction_max_clean,report_coverage_complete_clean,personnel_info_complete,week1_personnel_status_clean,away_report_available,home_report_available,away_known_exposure,home_known_exposure,away_unresolved_exposure_max,home_unresolved_exposure_max,manual_adjustment_home,qb_availability_provisional
 2026,4,2026_04_PIT_CLE,PIT,CLE,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
-2026,4,2026_04_IND_WAS,IND,WAS,-1.5,-1.5,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,-1.5,True
+2026,4,2026_04_IND_WAS,IND,WAS,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_TEN_BAL,TEN,BAL,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_NE_BUF,NE,BUF,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_NYJ_CHI,NYJ,CHI,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_JAX_CIN,JAX,CIN,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_DAL_HOU,DAL,HOU,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
-2026,4,2026_04_ARI_NYG,ARI,NYG,-1.5,-1.5,-1.5,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,-1.5,False
+2026,4,2026_04_ARI_NYG,ARI,NYG,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_LA_PHI,LA,PHI,-0.009999999999999898,-0.009999999999999898,-0.009999999999999898,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,-0.009999999999999898,False
-2026,4,2026_04_GB_TB,GB,TB,-1.5,-1.5,-1.5,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,-1.5,False
+2026,4,2026_04_GB_TB,GB,TB,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_MIA_MIN,MIA,MIN,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_KC_LV,KC,LV,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,4,2026_04_LAC_SEA,LAC,SEA,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
