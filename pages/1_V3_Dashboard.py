@@ -512,30 +512,53 @@ with tab5:
     st.subheader("My Bets — V3 View")
     st.caption(
         "This is the same permanent wager ledger used by Core V2. "
-        "V3 labels each spread bet by whether the price you took was backed by V3 at the current archived fair line."
+        "Spread backing uses the saved V3 board for the bet's own week. Results use final scores; closing-line comparisons require a captured close."
     )
     bets_path_v3 = ROOT / "data" / "tracking" / "my_bets.csv"
     bets_v3 = bet_tracking.load_bets(bets_path_v3)
     shared_grades_path = locate_file("game_grades.csv") or locate_file("data/tracking/game_grades.csv")
-    shared_grades = load_csv(str(shared_grades_path)) if shared_grades_path else pd.DataFrame()
+    shared_grades = load_csv(str(shared_grades_path), shared_grades_path.stat().st_mtime_ns) if shared_grades_path else pd.DataFrame()
     if bets_v3.empty:
         st.info("No bets recorded yet.")
     else:
         display_bets_v3=bet_tracking.grade_bets_against_closes(bets_v3,shared_grades)
-        fair_map=dict(zip(raw_board["matchup"],-pd.to_numeric(raw_board["fair_home_spread_v3"],errors="coerce")))
-        away_map=dict(zip(raw_board["matchup"],raw_board["away_team"]))
-        home_map=dict(zip(raw_board["matchup"],raw_board["home_team"]))
+        archived_bet_boards = [
+            load_csv(str(path), path.stat().st_mtime_ns)
+            for path in sorted((ROOT / "data" / "research" / "v3").glob("week_*_v3_board.csv"))
+        ]
+        archived_bet_boards = [frame for frame in archived_bet_boards
+                               if {"season", "week", "matchup", "fair_home_spread_v3",
+                                   "away_team", "home_team"}.issubset(frame.columns)]
+        historical_board = (pd.concat(archived_bet_boards, ignore_index=True)
+                            if archived_bet_boards else raw_board)
+        historical_board = historical_board.drop_duplicates(
+            ["season", "week", "matchup"], keep="first"
+        )
+        fair_map = {
+            (int(row.season), int(row.week), str(row.matchup)):
+            (float(row.fair_home_spread_v3), str(row.away_team), str(row.home_team))
+            for row in historical_board.itertuples(index=False)
+            if pd.notna(row.fair_home_spread_v3)
+        }
         def v3_backing(row):
-            typ=str(row.get("bet_type","SPREAD")).upper()
-            if typ!="SPREAD": return "N/A — no V3 ML/total model"
-            matchup=str(row["matchup"])
-            if matchup not in fair_map or pd.isna(fair_map[matchup]): return "Unavailable"
-            team=str(row.get("selection") or row.get("team"))
+            typ = str(row.get("bet_type", "SPREAD")).upper()
+            if typ != "SPREAD":
+                return "N/A — no V3 ML/total model"
+            key = (int(row["season"]), int(row["week"]), str(row["matchup"]))
+            if key not in fair_map:
+                return "Unavailable"
+            home_margin, away_team, home_team = fair_map[key]
+            team = str(row.get("selection") or row.get("team"))
             try:
-                model_side=bet_tracking.selected_team_model_spread(team,str(away_map[matchup]),str(home_map[matchup]),float(fair_map[matchup]))
-                _,alignment=bet_tracking.classify_bet_alignment(float(row["bet_line"]),model_side)
-                return {"WITH_MODEL":"Backed by V3","AGAINST_MODEL":"Not backed by V3","NEUTRAL":"Neutral vs V3"}.get(alignment,"Unavailable")
-            except Exception:
+                selected_fair = bet_tracking.selected_team_model_spread(
+                    team, away_team, home_team, -home_margin
+                )
+                _, alignment = bet_tracking.classify_bet_alignment(
+                    float(row["bet_line"]), selected_fair
+                )
+                return {"WITH_MODEL": "Backed by V3", "AGAINST_MODEL": "Not backed by V3",
+                        "NEUTRAL": "Neutral vs V3"}.get(alignment, "Unavailable")
+            except (ValueError, TypeError):
                 return "Unavailable"
         display_bets_v3["V3 backing"]=display_bets_v3.apply(v3_backing,axis=1)
         def bet_label(row):
