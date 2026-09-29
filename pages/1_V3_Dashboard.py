@@ -107,7 +107,8 @@ def locate_file(filename):
 
 
 @st.cache_data
-def load_csv(path_string):
+def load_csv(path_string, file_mtime_ns=None):
+    del file_mtime_ns  # include modification time in Streamlit cache key
     return pd.read_csv(path_string)
 
 
@@ -186,22 +187,24 @@ st.caption(
     "+ EPA state updates + HFA/neutral-site. Market lines shown here are comparison-only."
 )
 
-board_filename = st.sidebar.text_input(
-    "Board file", value="week_v3_board.csv",
-    help="The CSV board.py wrote for the week you want to view.",
+board_choices = {"Current Week": ROOT / "week_v3_board.csv"}
+for archived_path in sorted((ROOT / "data" / "research" / "v3").glob("week_*_v3_board.csv"), reverse=True):
+    try:
+        archived_week = int(archived_path.name.split("_")[1])
+    except (IndexError, ValueError):
+        continue
+    board_choices[f"Week {archived_week} archive"] = archived_path
+
+board_choice = st.sidebar.selectbox(
+    "V3 board", list(board_choices), index=0, key="v3_board_source_current_week_v2",
+    help="Current Week follows the published V3 board. Select an archive to review an older week.",
 )
-
-board_path = locate_file(board_filename)
-
-if board_path is None:
-    st.error(
-        f"Could not find {board_filename}. Run board.py for this week "
-        "first, and make sure the output CSV is in this folder (or a "
-        "data/ subfolder) next to app_v3.py."
-    )
+board_path = board_choices[board_choice]
+if not board_path.exists():
+    st.error(f"V3 board is missing: {board_path.name}")
     st.stop()
 
-raw_board = load_csv(str(board_path))
+raw_board = load_csv(str(board_path), board_path.stat().st_mtime_ns)
 if "personnel_status" in raw_board.columns and not raw_board.empty:
     status = str(raw_board["personnel_status"].iloc[0])
     if status == "EARLY_PROVISIONAL_DEF_PVAR_UNAVAILABLE":
@@ -226,6 +229,7 @@ if missing_cols:
 
 active_season = int(raw_board["season"].iloc[0])
 active_week = int(raw_board["week"].iloc[0])
+st.caption(f"Loaded {board_choice}: {active_season} Week {active_week} ({board_path.name})")
 
 # The V3 snapshot is independent of Core V2's weekly publish. Make lag visible.
 current_v2_path = locate_file("current_live_board.csv")
