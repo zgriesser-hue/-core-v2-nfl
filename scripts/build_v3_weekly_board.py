@@ -34,6 +34,7 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
     board["market_adjustment"] = 0.0
     board["market_home_spread"] = pd.to_numeric(board.spread_line, errors="coerce")
     board["qb_adjustment"] = 0.0
+    board["qb_availability_notes"] = ""
     for row in availability.itertuples(index=False):
         if row.assessment == "AVAILABLE":
             continue
@@ -41,6 +42,8 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
             raise ValueError("Non-QB early availability requires separate reviewed PVAR accounting")
         board.loc[board.home_team.eq(row.team), "qb_adjustment"] += float(row.adjustment_points)
         board.loc[board.away_team.eq(row.team), "qb_adjustment"] -= float(row.adjustment_points)
+        note = f"{getattr(row, 'player', 'QB')}: {row.assessment} ({float(row.adjustment_points):+.2f} team pts)"
+        board.loc[board.home_team.eq(row.team) | board.away_team.eq(row.team), "qb_availability_notes"] = note
     board["personnel_adjustment"] = board.qb_adjustment
     board["neutral_hfa_adjustment"] = 0.0
     board["pred_v3_lite"] = board.persistent_margin + board.hfa_component + board.personnel_adjustment
