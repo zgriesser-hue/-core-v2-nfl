@@ -209,7 +209,7 @@ if "personnel_status" in raw_board.columns and not raw_board.empty:
     status = str(raw_board["personnel_status"].iloc[0])
     if status == "EARLY_PROVISIONAL_DEF_PVAR_UNAVAILABLE":
         st.warning(
-            "EARLY V3 RESEARCH BOARD: EPA ratings and reviewed QB scenarios are applied, "
+            "EARLY V3 RESEARCH BOARD: EPA ratings and reviewed QB availability adjustments are applied, "
             "but current-week defensive PVAR is unavailable. These fair lines omit unknown "
             "defensive injury effects; do not treat the listed edges as fully injury-adjusted."
         )
@@ -422,6 +422,9 @@ with tab2:
         c3.metric("pred_v30 (base)", f'{row["pred_v30"]:.2f}')
     if "market_adjustment" in row:
         c3.metric("Market adjustment", f'{row["market_adjustment"]:.2f}')
+
+    if "qb_availability_notes" in row and pd.notna(row["qb_availability_notes"]) and str(row["qb_availability_notes"]).strip():
+        st.caption("QB availability: " + str(row["qb_availability_notes"]))
 
     if "personnel_adjustment" in row and "neutral_hfa_adjustment" in row:
         st.caption(
