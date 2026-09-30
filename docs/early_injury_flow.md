@@ -29,7 +29,18 @@ is the fast path between a sourced injury announcement and a published board.
    The Streamlit V3 Market Board displays known defensive outs and QB
    availability separately.
 
-This is a reviewed publishing path, not an automatic injury news feed.
-Automated source discovery and player-specific QB valuation remain separate
-work. The ledger is week-specific: carry a multiweek absence into each
+The read-only source monitor (`scripts/monitor_injuries.py`) runs from
+`.github/workflows/monitor_injuries.yml` hourly during daytime/evening
+Eastern. It scans the official NFL news index and the current-week NFL injury
+report, then adds exact/unique roster matches to
+`data/monitor/injury_review_queue_<season>.csv`. The V3 Early Injury Watch
+tab shows source links, signals, first-seen time and potential defensive
+points. News headlines and practice designations are leads only: the monitor
+never edits the reviewed ledger or changes a projection. Its news index may
+miss team-only announcements, so the review process also accepts a direct
+official team source. The scanner rejects previous-week dated headlines and
+does not reuse a stale prior-week official report.
+
+Player-specific QB valuation and automatic approval of injury news remain
+separate work. The ledger is week-specific: carry a multiweek absence into each
 future week only after confirming that week's availability.
