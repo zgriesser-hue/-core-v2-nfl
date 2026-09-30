@@ -24,7 +24,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: core-v2-repository-data-write
+  group: injury-review-queue
   cancel-in-progress: false
 
 jobs:
