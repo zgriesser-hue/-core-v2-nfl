@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from scripts.build_native_v3_pvar_board import build_board as attach_defensive_pvar
-from scripts.early_availability import load_early_availability
+from scripts.early_availability import load_early_availability, reviewed_defensive_losses
 from v3_model.epa_updater import update_split_state
 
 
@@ -35,11 +35,13 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
     board["market_home_spread"] = pd.to_numeric(board.spread_line, errors="coerce")
     board["qb_adjustment"] = 0.0
     board["qb_availability_notes"] = ""
+    board["def_availability_notes"] = ""
+    early_defense = reviewed_defensive_losses(availability, ratings)
     for row in availability.itertuples(index=False):
         if row.assessment == "AVAILABLE":
             continue
         if row.position_group != "QB":
-            raise ValueError("Non-QB early availability requires separate reviewed PVAR accounting")
+            continue  # Reviewed defensive players are valued from frozen PVAR below.
         board.loc[board.home_team.eq(row.team), "qb_adjustment"] += float(row.adjustment_points)
         board.loc[board.away_team.eq(row.team), "qb_adjustment"] -= float(row.adjustment_points)
         note = f"{getattr(row, 'player', 'QB')}: {row.assessment} ({float(row.adjustment_points):+.2f} team pts)"
@@ -65,6 +67,50 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
         board["personnel_status"] = "EARLY_PROVISIONAL_DEF_PVAR_UNAVAILABLE"
         board["home_def_loss_pvar"] = pd.NA
         board["away_def_loss_pvar"] = pd.NA
+    if not early_defense.empty:
+        # With full reports, add only the portion not already counted in the
+        # official player audit. Before full coverage, these are known-only
+        # losses, never a claim that all other defenders are healthy.
+        known = early_defense.copy()
+        if full_coverage:
+            official = audit.copy()
+            official["gsis_id"] = official.gsis_id.astype("string")
+            official["status_weight"] = pd.to_numeric(official.status_weight, errors="coerce")
+            eligible = official.v2_shadow_eligible.astype(str).str.lower().eq("true")
+            official = official.loc[eligible & official.status_weight.notna()]
+            accounted = official.groupby(["team", "gsis_id"]).status_weight.sum()
+            known["already_counted"] = known.apply(
+                lambda row: min(float(row.loss_pvar),
+                                float(row.loss_pvar) * float(accounted.get(
+                                    (row.team, str(row.gsis_id)), 0.0))), axis=1
+            )
+        else:
+            known["already_counted"] = 0.0
+        known["incremental_loss"] = known.loss_pvar - known.already_counted
+        by_team = known.groupby("team").incremental_loss.sum()
+        for side in ("home", "away"):
+            column = f"{side}_def_loss_pvar"
+            board[column] = pd.to_numeric(board[column], errors="coerce").fillna(0.0)
+            board[column] += board[f"{side}_team"].map(by_team).fillna(0.0)
+        points = 2.25 * (
+            board.away_team.map(by_team).fillna(0.0)
+            - board.home_team.map(by_team).fillna(0.0)
+        )
+        board["personnel_adjustment"] += points
+        board["pred_v3_lite"] += points
+        board["fair_home_spread_v3"] = board.pred_v3_lite
+        for row in known.itertuples(index=False):
+            mask = board.home_team.eq(row.team) | board.away_team.eq(row.team)
+            note = f"{row.player}: CONFIRMED_OUT ({row.points:.2f} pts full PVAR)"
+            board.loc[mask, "def_availability_notes"] = (
+                board.loc[mask, "def_availability_notes"].map(
+                    lambda existing: f"{existing}; {note}" if existing else note
+                )
+            )
+        board["personnel_status"] = (
+            "native_v3_fixed_225_plus_reviewed_availability" if full_coverage
+            else "EARLY_PROVISIONAL_KNOWN_DEF_PVAR_ONLY"
+        )
     board["edge_points"] = (board.fair_home_spread_v3 - board.market_home_spread).abs()
     board["model_side"] = board.apply(
         lambda r: r.home_team if r.fair_home_spread_v3 > r.market_home_spread else r.away_team, axis=1)
