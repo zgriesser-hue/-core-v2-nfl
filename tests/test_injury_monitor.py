@@ -1,6 +1,6 @@
 import pandas as pd
 
-from scripts.monitor_injuries import build_candidates, merge_queue, parse_news_links
+from scripts.monitor_injuries import build_candidates, merge_queue, parse_news_links, recent_news
 
 
 def test_official_headline_and_report_create_review_leads_without_autopricing():
@@ -34,3 +34,12 @@ def test_official_headline_and_report_create_review_leads_without_autopricing():
                                                    2026, 4, "2026-09-29T13:00:00Z"))
     assert len(updated) == len(first)
     assert set(updated.first_seen_utc) == {"2026-09-29T12:00:00Z"}
+
+
+def test_news_recency_excludes_previous_weeks_without_dropping_new_leads():
+    news = [
+        ("https://www.nfl.com/news/old", "Giants Dart injured Sep 11, 2026"),
+        ("https://www.nfl.com/news/new", "Giants Burns out Sep 28, 2026"),
+    ]
+    result = recent_news(news, pd.Timestamp("2026-09-27"))
+    assert result == [news[1]]
