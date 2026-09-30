@@ -154,8 +154,8 @@ def main() -> None:
     schedule = pd.read_csv(args.schedule)
     games = schedule.loc[schedule.season.eq(args.season) & schedule.week.eq(args.week)]
     teams = set(games.away_team) | set(games.home_team)
-    if len(teams) != 32:
-        raise ValueError("Expected all 32 teams in the target-week schedule")
+    if games.empty or len(teams) != 2 * len(games):
+        raise ValueError("Expected unique teams in the target-week schedule")
     response = requests.get(NEWS_URL, headers={"User-Agent": "Mozilla/5.0 NFL injury research"},
                             timeout=30)
     response.raise_for_status()
