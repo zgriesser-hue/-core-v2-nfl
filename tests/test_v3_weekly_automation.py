@@ -61,7 +61,7 @@ def test_reviewed_defensive_out_is_priced_before_report_and_not_double_counted()
                                       position_group="DB", assessment="CONFIRMED_OUT",
                                       adjustment_points=0.)])
     ratings = pd.DataFrame([dict(team="B", player_name="Defender B", gsis_id="00-1234567",
-                                 model_position_v2="DB", pvar_production=.8,
+                                 model_position_v2="CB", pvar_production=.8,
                                  pvar_source="REBASED")])
     history = pd.DataFrame(columns=["season", "week", "game_id", "team", "plays",
                                      "epa_per_play", "def_epa_per_play"])
