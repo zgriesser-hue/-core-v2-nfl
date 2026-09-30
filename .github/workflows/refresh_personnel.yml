@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "data/model/early_availability_*.csv"
+      - ".github/workflows/refresh_personnel.yml"
   schedule:
     - cron: "0 14 * * 1,2"
     - cron: "30 20 * * 3,4,5,6"
