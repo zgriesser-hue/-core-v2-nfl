@@ -163,6 +163,7 @@ def main() -> None:
     parser.add_argument("--week", type=int, required=True)
     parser.add_argument("--schedule", type=Path, required=True)
     parser.add_argument("--ratings", type=Path, required=True)
+    parser.add_argument("--availability-ledger", type=Path)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     schedule = pd.read_csv(args.schedule)
@@ -197,6 +198,13 @@ def main() -> None:
         old = old.loc[~old.source_type.eq("NFL_NEWS_HEADLINE")
                       | old.source_url.isin(still_recent)].copy()
     combined = merge_queue(old, fresh)
+    if args.availability_ledger and args.availability_ledger.exists() and not combined.empty:
+        reviewed = pd.read_csv(args.availability_ledger)
+        reviewed = reviewed.loc[reviewed.season.eq(args.season) & reviewed.week.eq(args.week)]
+        reviewed_keys = set(zip(reviewed.team, reviewed.player))
+        matched = combined.apply(lambda row: (row.team, row.player) in reviewed_keys
+                                 and row.season == args.season and row.week == args.week, axis=1)
+        combined.loc[matched, "review_status"] = "REVIEWED_IN_LEDGER"
     args.out.parent.mkdir(parents=True, exist_ok=True)
     combined.to_csv(args.out, index=False)
     print(f"Injury monitor: {len(news)} headlines; {len(fresh)} matching signals; "
