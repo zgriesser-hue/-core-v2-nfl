@@ -56,7 +56,7 @@ def parse_news_links(html: str) -> list[tuple[str, str]]:
 
 def recent_news(news: list[tuple[str, str]], earliest: pd.Timestamp) -> list[tuple[str, str]]:
     """Exclude dated headlines from before the Sunday that starts this NFL week."""
-    dated = re.compile(r"\\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2},\\s+\\d{4}\\b")
+    dated = re.compile(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}\b")
     kept = []
     for url, title in news:
         dates = dated.findall(title)
