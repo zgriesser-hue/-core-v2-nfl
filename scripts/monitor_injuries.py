@@ -54,6 +54,20 @@ def parse_news_links(html: str) -> list[tuple[str, str]]:
     return sorted(articles.items())
 
 
+def recent_news(news: list[tuple[str, str]], earliest: pd.Timestamp) -> list[tuple[str, str]]:
+    """Exclude dated headlines from before the Sunday that starts this NFL week."""
+    dated = re.compile(r"\\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2},\\s+\\d{4}\\b")
+    kept = []
+    for url, title in news:
+        dates = dated.findall(title)
+        if dates:
+            published = pd.to_datetime(dates[-1], errors="coerce")
+            if pd.notna(published) and published.normalize() < earliest.normalize():
+                continue
+        kept.append((url, title))
+    return kept
+
+
 def _player_in_headline(title: str, team: str, name: str, team_names: dict[str, str]) -> bool:
     normalized = normalize_player_name(name)
     title_key = normalize_player_name(title)
@@ -160,6 +174,9 @@ def main() -> None:
                             timeout=30)
     response.raise_for_status()
     news = parse_news_links(response.text)
+    first_game = pd.to_datetime(games.gameday, errors="raise").min().normalize()
+    earliest = first_game - pd.Timedelta(days=first_game.weekday() + 1)
+    news = recent_news(news, earliest)
     if not news:
         raise ValueError("Official NFL news index returned no injury headlines; source may have changed")
     try:
@@ -172,6 +189,13 @@ def main() -> None:
     ratings = pd.read_csv(args.ratings, dtype={"gsis_id": "string"})
     fresh = build_candidates(news, report, ratings, teams, args.season, args.week, observed)
     old = pd.read_csv(args.out, dtype={"gsis_id": "string"}) if args.out.exists() else pd.DataFrame(columns=COLUMNS)
+    if not old.empty:
+        old_news = old.loc[old.source_type.eq("NFL_NEWS_HEADLINE")]
+        still_recent = set(url for url, _ in recent_news(
+            list(zip(old_news.source_url, old_news.headline)), earliest
+        ))
+        old = old.loc[~old.source_type.eq("NFL_NEWS_HEADLINE")
+                      | old.source_url.isin(still_recent)].copy()
     combined = merge_queue(old, fresh)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     combined.to_csv(args.out, index=False)
