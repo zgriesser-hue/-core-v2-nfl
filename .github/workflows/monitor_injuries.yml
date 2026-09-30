@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "scripts/monitor_injuries.py"
+      - "data/model/early_availability_*.csv"
       - ".github/workflows/monitor_injuries.yml"
   schedule:
     # Hourly during daytime and evening Eastern; no sportsbook API credits.
@@ -54,6 +55,7 @@ jobs:
             --season "$TARGET_SEASON" --week "$TARGET_WEEK" \
             --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
             --ratings "data/model/v3_player_pvar_${TARGET_SEASON}.csv" \
+            --availability-ledger "data/model/early_availability_${TARGET_SEASON}.csv" \
             --out "data/monitor/injury_review_queue_${TARGET_SEASON}.csv"
       - name: Commit only new review leads
         shell: bash
