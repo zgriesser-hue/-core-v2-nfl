@@ -47,3 +47,47 @@ def test_early_board_shows_qb_scenario_but_unknown_defensive_pvar():
     assert pd.isna(row.home_def_loss_pvar)
     assert row.personnel_status == "EARLY_PROVISIONAL_DEF_PVAR_UNAVAILABLE"
     assert len(state) == 2
+
+
+def test_reviewed_defensive_out_is_priced_before_report_and_not_double_counted():
+    priors = pd.DataFrame([
+        dict(team="A", offense_strength=0., defense_strength=0.),
+        dict(team="B", offense_strength=0., defense_strength=0.),
+    ])
+    schedule = pd.DataFrame([dict(season=2026, week=4, game_id="2026_04_A_B",
+                                  away_team="A", home_team="B", location="Neutral",
+                                  spread_line=0., game_type="REG")])
+    availability = pd.DataFrame([dict(team="B", player="Defender B",
+                                      position_group="DB", assessment="CONFIRMED_OUT",
+                                      adjustment_points=0.)])
+    ratings = pd.DataFrame([dict(team="B", player_name="Defender B", gsis_id="00-1234567",
+                                 model_position_v2="DB", pvar_production=.8,
+                                 pvar_source="REBASED")])
+    history = pd.DataFrame(columns=["season", "week", "game_id", "team", "plays",
+                                     "epa_per_play", "def_epa_per_play"])
+    missing = pd.DataFrame([dict(team="A", report_available=False),
+                            dict(team="B", report_available=False)])
+    early, _ = build_week(history, priors, schedule, missing, pd.DataFrame(),
+                          ratings, availability, 2026, 4)
+    row = early.iloc[0]
+    assert row.home_def_loss_pvar == pytest.approx(.8)
+    assert row.fair_home_spread_v3 == pytest.approx(-1.8)
+    assert row.personnel_status == "EARLY_PROVISIONAL_KNOWN_DEF_PVAR_ONLY"
+    assert "Defender B" in row.def_availability_notes
+
+    covered = pd.DataFrame([dict(team="A", report_available=True),
+                            dict(team="B", report_available=True)])
+    audit = pd.DataFrame([dict(team="B", player_name="Defender B",
+                               gsis_id="00-1234567", source_season=2026,
+                               source_week=4, position_group="DB",
+                               v2_shadow_eligible=True, status_weight=1.)])
+    full, _ = build_week(history, priors, schedule, covered, audit,
+                         ratings, availability, 2026, 4)
+    assert full.iloc[0].home_def_loss_pvar == pytest.approx(.8)
+    assert full.iloc[0].fair_home_spread_v3 == pytest.approx(-1.8)
+
+    audit.loc[0, "status_weight"] = .5
+    partial, _ = build_week(history, priors, schedule, covered, audit,
+                            ratings, availability, 2026, 4)
+    assert partial.iloc[0].home_def_loss_pvar == pytest.approx(.8)
+    assert partial.iloc[0].fair_home_spread_v3 == pytest.approx(-1.8)
