@@ -595,6 +595,32 @@ with tab5:
 with tab6:
     st.subheader("Early Injury Watch")
     st.caption("Prior-week absences are verification leads only. Blank current-week status means availability is unknown; no PVAR adjustment is applied.")
+    queue_path = ROOT / "data" / "monitor" / f"injury_review_queue_{active_season}.csv"
+    if queue_path.exists():
+        queue = load_csv(str(queue_path), queue_path.stat().st_mtime_ns)
+        queue = queue.loc[queue["season"].eq(active_season) & queue["week"].eq(active_week)]
+        if not queue.empty:
+            st.markdown("**Official-source review queue**")
+            st.caption("Headlines and practice reports are leads. They do not change a fair line until reviewed.")
+            queue = queue.copy()
+            queue["Potential defensive pts"] = pd.to_numeric(
+                queue["potential_def_points"], errors="coerce"
+            ).round(2)
+            st.dataframe(
+                queue.rename(columns={"team": "Team", "player": "Player",
+                                      "signal": "Signal", "headline": "Headline",
+                                      "source_url": "Source", "first_seen_utc": "First seen"})[
+                    ["Team", "Player", "Signal", "Potential defensive pts",
+                     "Headline", "Source", "First seen"]
+                ].sort_values("Potential defensive pts", ascending=False, na_position="last"),
+                use_container_width=True, hide_index=True,
+                column_config={"Source": st.column_config.LinkColumn("Source")},
+            )
+        else:
+            st.caption("No current-week official-source review leads yet.")
+    else:
+        st.caption("The official-source monitor has not published a review queue yet.")
+    st.divider()
     watch_path = ROOT / "data" / "research" / "v3" / "week_04_early_injury_watchlist.csv"
     if watch_path.exists():
         watch = load_csv(str(watch_path))
