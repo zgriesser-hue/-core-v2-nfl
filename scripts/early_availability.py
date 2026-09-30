@@ -101,14 +101,12 @@ def apply_early_availability(weekly: pd.DataFrame, ledger: pd.DataFrame) -> pd.D
     collisions = set(zip(ledger.team, ledger.player)) & keys
     if collisions:
         raise ValueError(f"Availability already priced in weekly adjustments: {sorted(collisions)}")
-    # Defensive rows are valued from the frozen V3 player PVAR snapshot.\n    # They must not enter Core V2 as a zero-point manual row or suppress its report join.\n    active = ledger.loc[~ledger.assessment.eq("AVAILABLE") & ledger.position_group.eq("QB")].copy()
+    # Defensive rows use frozen V3 PVAR; they must not suppress Core V2's injury join.
+    active = ledger.loc[~ledger.assessment.eq("AVAILABLE") & ledger.position_group.eq("QB")].copy()
     if active.empty:
         return weekly
-    if (active.assessment.eq("PROVISIONAL_QB") & ~active.position_group.eq("QB")).any():
-        raise ValueError("Provisional QB scenarios require QB position")
-    active["category"] = active.apply(
-        lambda row: "QB_PROVISIONAL" if row.assessment == "PROVISIONAL_QB"
-        else ("QB" if row.position_group == "QB" else "INJURY"), axis=1
+    active["category"] = active.assessment.map(
+        lambda assessment: "QB_PROVISIONAL" if assessment == "PROVISIONAL_QB" else "QB"
     )
     active["exclude_from_auto"] = True
     for col in weekly.columns:
