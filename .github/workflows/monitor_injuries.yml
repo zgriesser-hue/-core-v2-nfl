@@ -1,0 +1,76 @@
+name: Monitor official NFL injury sources
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/monitor_injuries.py"
+      - ".github/workflows/monitor_injuries.yml"
+  schedule:
+    # Hourly during daytime and evening Eastern; no sportsbook API credits.
+    - cron: "17 0-2,12-23 * * *"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: NFL season
+        required: true
+        default: "2026"
+      week:
+        description: Week; blank resolves the active week
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: core-v2-repository-data-write
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      TARGET_SEASON: ${{ inputs.season || '2026' }}
+      TARGET_WEEK: ${{ inputs.week }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e .
+      - name: Resolve active week
+        shell: bash
+        run: |
+          if [ -z "$TARGET_WEEK" ]; then
+            TARGET_WEEK=$(python -m scripts.resolve_week --mode active --season "$TARGET_SEASON" --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" --floor-board current_live_board.csv)
+          fi
+          echo "TARGET_WEEK=$TARGET_WEEK" >> "$GITHUB_ENV"
+      - name: Scan NFL news and official report into review queue
+        shell: bash
+        run: |
+          python -m scripts.monitor_injuries \
+            --season "$TARGET_SEASON" --week "$TARGET_WEEK" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --ratings "data/model/v3_player_pvar_${TARGET_SEASON}.csv" \
+            --out "data/monitor/injury_review_queue_${TARGET_SEASON}.csv"
+      - name: Commit only new review leads
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain -- data/monitor)" ]; then
+            echo "No new injury review leads"
+            exit 0
+          fi
+          git config user.name "core-v2-automation"
+          git config user.email "core-v2-automation@users.noreply.github.com"
+          git add data/monitor
+          git commit -m "data: queue new official injury review leads"
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            git fetch origin main
+            git rebase origin/main
+          done
+          exit 1
