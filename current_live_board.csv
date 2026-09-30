@@ -1,5 +1,5 @@
 season,week,game_key,away_team,home_team,fair_home_spread,fair_spread_low,fair_spread_high,fair_spread_uncertainty_width,projection_display_status,personnel_projection_status,used_personnel_fallback,personnel_info_complete,qb_availability_provisional,core_v2_home_spread,matchup
-2026,4,2026_W4_PIT_CLE,PIT,CLE,1.496,1.496,1.496,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,1.496,PIT @ CLE
+2026,4,2026_W4_PIT_CLE,PIT,CLE,1.501,1.501,1.501,0.0,UPDATED_PREGAME,UPDATED,False,True,False,1.501,PIT @ CLE
 2026,4,2026_W4_IND_WAS,IND,WAS,3.086,1.586,3.086,1.5,EARLY_PROVISIONAL,PROVISIONAL,True,False,True,3.086,IND @ WAS
 2026,4,2026_W4_TEN_BAL,TEN,BAL,-11.18,-11.18,-11.18,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-11.18,TEN @ BAL
 2026,4,2026_W4_NE_BUF,NE,BUF,-4.3,-4.3,-4.3,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-4.3,NE @ BUF

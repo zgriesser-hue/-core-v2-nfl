@@ -6,7 +6,7 @@ BUF,False
 CAR,False
 CHI,False
 CIN,False
-CLE,False
+CLE,True
 DAL,False
 DEN,False
 DET,False
@@ -25,7 +25,7 @@ NO,False
 NYG,False
 NYJ,False
 PHI,False
-PIT,False
+PIT,True
 SEA,False
 SF,False
 TB,False
