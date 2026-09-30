@@ -213,7 +213,10 @@ if "personnel_status" in raw_board.columns and not raw_board.empty:
             "but current-week defensive PVAR is unavailable. These fair lines omit unknown "
             "defensive injury effects; do not treat the listed edges as fully injury-adjusted."
         )
-    elif status == "native_v3_fixed_225_plus_reviewed_qb":
+    elif status == "EARLY_PROVISIONAL_KNOWN_DEF_PVAR_ONLY":
+        st.warning("EARLY V3 RESEARCH BOARD: reviewed confirmed defensive losses and QB scenarios are applied. "
+                   "Other defensive availability is still unknown until complete official reports arrive.")
+    elif status in {"native_v3_fixed_225_plus_reviewed_qb", "native_v3_fixed_225_plus_reviewed_availability"}:
         st.success("Native V3 fixed 2.25 defensive PVAR and reviewed QB scenarios are applied.")
     else:
         st.info(f"Personnel source: {status}. Check this board's provenance before using its edges.")
@@ -394,6 +397,7 @@ with tab1:
             "Lean": filtered["model_side"],
             "Edge (pts)": filtered["edge_points"].round(2),
             "QB availability": filtered["qb_availability_notes"].fillna("") if "qb_availability_notes" in filtered else "",
+            "Known defensive outs": filtered["def_availability_notes"].fillna("") if "def_availability_notes" in filtered else "",
         }
     )
 
@@ -426,6 +430,9 @@ with tab2:
 
     if "qb_availability_notes" in row and pd.notna(row["qb_availability_notes"]) and str(row["qb_availability_notes"]).strip():
         st.caption("QB availability: " + str(row["qb_availability_notes"]))
+
+    if "def_availability_notes" in row and pd.notna(row["def_availability_notes"]) and str(row["def_availability_notes"]).strip():
+        st.caption("Known defensive outs: " + str(row["def_availability_notes"]))
 
     if "personnel_adjustment" in row and "neutral_hfa_adjustment" in row:
         st.caption(
