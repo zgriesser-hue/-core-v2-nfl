@@ -609,8 +609,9 @@ with tab6:
             st.dataframe(
                 queue.rename(columns={"team": "Team", "player": "Player",
                                       "signal": "Signal", "headline": "Headline",
-                                      "source_url": "Source", "first_seen_utc": "First seen"})[
-                    ["Team", "Player", "Signal", "Potential defensive pts",
+                                      "source_url": "Source", "first_seen_utc": "First seen",
+                                      "review_status": "Review"})[
+                    ["Review", "Team", "Player", "Signal", "Potential defensive pts",
                      "Headline", "Source", "First seen"]
                 ].sort_values("Potential defensive pts", ascending=False, na_position="last"),
                 use_container_width=True, hide_index=True,
