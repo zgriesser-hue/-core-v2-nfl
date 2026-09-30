@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from v3_model.personnel import normalize_position_group
+
 
 REQUIRED = {"season", "week", "team", "player", "position_group", "assessment", "source_url",
             "source_published_at_utc", "observed_at_utc", "reviewed_by",
@@ -83,7 +85,7 @@ def reviewed_defensive_losses(ledger: pd.DataFrame, ratings: pd.DataFrame) -> pd
     if not found._merge.eq("both").all():
         raise ValueError("Unmatched reviewed defensive player: "
                          + ", ".join(found.loc[found._merge.ne("both"), "player"]))
-    if not found.position_group.eq(found.model_position_v2).all():
+    if not found.position_group.eq(found.model_position_v2.map(normalize_position_group)).all():
         raise ValueError("Reviewed defensive position disagrees with frozen PVAR")
     found["loss_pvar"] = pd.to_numeric(found.pvar_production, errors="coerce")
     if found.gsis_id.isna().any() or found.loss_pvar.isna().any() or found.loss_pvar.lt(0).any():
