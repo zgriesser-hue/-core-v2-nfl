@@ -44,3 +44,25 @@ def test_available_player_has_no_adjustment(tmp_path):
     loaded = load_early_availability(path, 2026, 4, datetime(2026, 10, 1, 13, tzinfo=timezone.utc))
     weekly = pd.DataFrame(columns=["team", "player", "category", "adjustment_points"])
     assert apply_early_availability(weekly, loaded).empty
+
+
+def test_confirmed_defensive_out_is_valued_only_in_v3(tmp_path):
+    row = dict(season=2026, week=4, team="B", player="Defender B",
+               position_group="DB", assessment="CONFIRMED_OUT",
+               source_url="https://example.com/team-report",
+               source_published_at_utc="2026-09-28T18:00:00Z",
+               observed_at_utc="2026-09-28T18:01:00Z",
+               reviewed_by="research", reason="Team confirmed out",
+               adjustment_points=0, out_adjustment_points=0)
+    path = tmp_path / "availability.csv"
+    pd.DataFrame([row]).to_csv(path, index=False)
+    ledger = load_early_availability(
+        path, 2026, 4, datetime(2026, 9, 28, 19, tzinfo=timezone.utc)
+    )
+    weekly = pd.DataFrame(columns=["team", "player", "category", "adjustment_points"])
+    assert apply_early_availability(weekly, ledger).empty
+    row["adjustment_points"] = -1.8
+    pd.DataFrame([row]).to_csv(path, index=False)
+    with pytest.raises(ValueError, match="derived from frozen V3 PVAR"):
+        load_early_availability(path, 2026, 4,
+                                datetime(2026, 9, 28, 19, tzinfo=timezone.utc))
