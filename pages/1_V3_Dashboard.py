@@ -88,6 +88,7 @@ import streamlit as st
 from parlay_live import fetch_live_lines, format_american, format_spread, rebuild_board
 from pregame_filter import select_pregame_game_keys
 from core_v2 import bet_tracking
+from scripts.v3_performance import grade_releases
 
 st.set_page_config(
     page_title="V3 NFL Dashboard",
@@ -514,6 +515,51 @@ with tab4:
                     )
                     st.caption("This grades the saved V3 fair line against the final margin. "
                                "A missing closing line does not block score grading.")
+
+    st.markdown("#### V3 release ATS and closing line")
+    st.caption("Uses the first timestamped V3 release with a captured pregame market quote. "
+               "ATS is at that quoted spread. Projection vs close is the V3 fair line's "
+               "signed edge on its original side at the captured close; market CLV is "
+               "the original market spread against the close. These are distinct from "
+               "your actual wagers in My Bets. Older archive-only games are excluded.")
+    release_path = ROOT / "data" / "tracking" / "v3_projection_releases.csv"
+    close_path = ROOT / "data" / "tracking" / "closing_consensus.csv"
+    if not release_path.exists() or not close_path.exists() or not shared_grades_path.exists():
+        st.info("No timestamped V3 release, score, and close records are available yet.")
+    else:
+        releases = load_csv(str(release_path), release_path.stat().st_mtime_ns)
+        closes = load_csv(str(close_path), close_path.stat().st_mtime_ns)
+        outcomes = load_csv(str(shared_grades_path), shared_grades_path.stat().st_mtime_ns)
+        try:
+            vg = grade_releases(releases, outcomes, closes)
+        except ValueError as exc:
+            st.error(f"V3 release grading stopped: {exc}")
+        else:
+            if vg.empty:
+                st.info("No V3 release has a timestamped pregame market quote yet.")
+            else:
+                completed_v3 = vg.loc[vg.ats_result.ne("Pending")]
+                wins = int(completed_v3.ats_result.eq("Win").sum())
+                losses = int(completed_v3.ats_result.eq("Loss").sum())
+                pushes = int(completed_v3.ats_result.eq("Push").sum())
+                valid_close_v3 = vg.loc[vg.closing_home_spread.notna()]
+                a, b, c, d = st.columns(4)
+                a.metric("V3 ATS", f"{wins}-{losses}-{pushes}")
+                b.metric("Graded release MAE", f"{completed_v3.absolute_error.mean():.2f}" if len(completed_v3) else "—")
+                c.metric("Projection vs close", f"{valid_close_v3.projection_vs_close_points.mean():+.2f}" if len(valid_close_v3) else "—")
+                d.metric("Market CLV", f"{valid_close_v3.market_clv_points.mean():+.2f}" if len(valid_close_v3) else "—")
+                st.caption(f"{len(completed_v3)} scored releases; {len(valid_close_v3)} valid captured closes. "
+                           "Pushes are excluded from win rate. No ROI is inferred without bet odds.")
+                shown = vg[["week", "away_team", "home_team", "release_timestamp_utc",
+                            "model_side", "fair_home_margin_v3", "release_market_home_spread",
+                            "closing_home_spread", "ats_result", "projection_vs_close_points",
+                            "market_clv_points"]].copy()
+                shown["matchup"] = shown.away_team + " @ " + shown.home_team
+                st.dataframe(shown[["week", "matchup", "release_timestamp_utc", "model_side",
+                                    "fair_home_margin_v3", "release_market_home_spread",
+                                    "closing_home_spread", "ats_result", "projection_vs_close_points",
+                                    "market_clv_points"]].sort_values("week", ascending=False),
+                             use_container_width=True, hide_index=True)
 
 with tab5:
     st.subheader("My Bets — V3 View")
