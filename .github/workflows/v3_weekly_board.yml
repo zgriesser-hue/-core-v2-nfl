@@ -7,12 +7,14 @@ on:
       - "scripts/build_v3_*.py"
       - ".github/workflows/v3_weekly_board.yml"
       - "pages/1_V3_Dashboard.py"
+      - "scripts/v3_performance.py"
       - "data/model/early_availability_*.csv"
   pull_request:
     paths:
       - "scripts/build_v3_*.py"
       - ".github/workflows/v3_weekly_board.yml"
       - "pages/1_V3_Dashboard.py"
+      - "scripts/v3_performance.py"
       - "data/model/early_availability_*.csv"
   schedule:
     - cron: "45 14 * * 1,2"
@@ -91,17 +93,27 @@ jobs:
             --state-out "data/research/v3/week_${WEEK_PADDED}_v3_state.csv" \
             --out "data/research/v3/week_${WEEK_PADDED}_v3_board.csv"
           cp "data/research/v3/week_${WEEK_PADDED}_v3_board.csv" week_v3_board.csv
+      - name: Freeze timestamped pregame V3 releases
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          WEEK_PADDED=$(printf "%02d" "$TARGET_WEEK")
+          python -m scripts.v3_performance \
+            --board "data/research/v3/week_${WEEK_PADDED}_v3_board.csv" \
+            --schedule "data/schedules/schedule_${TARGET_SEASON}.csv" \
+            --market-snapshots data/tracking/projection_market_snapshots.csv \
+            --releases data/tracking/v3_projection_releases.csv
       - name: Commit validated V3 research snapshot
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          if [ -z "$(git status --porcelain -- data/research/v3 data/production week_v3_board.csv)" ]; then
+          if [ -z "$(git status --porcelain -- data/research/v3 data/production week_v3_board.csv data/tracking/v3_projection_releases.csv)" ]; then
             echo "V3 snapshot unchanged"
             exit 0
           fi
           git config user.name "core-v2-automation"
           git config user.email "core-v2-automation@users.noreply.github.com"
-          git add data/research/v3 data/production week_v3_board.csv
+          git add data/research/v3 data/production week_v3_board.csv data/tracking/v3_projection_releases.csv
           git commit -m "data: refresh provisional V3 weekly board"
           for attempt in 1 2 3; do
             if git push; then
