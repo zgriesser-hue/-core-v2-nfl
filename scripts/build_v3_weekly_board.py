@@ -8,12 +8,18 @@ import pandas as pd
 
 from scripts.build_native_v3_pvar_board import build_board as attach_defensive_pvar
 from scripts.early_availability import load_early_availability, reviewed_defensive_losses
+from scripts.v3_market_snapshot import attach_market_snapshot
+from scripts.v3_injury_guard import unresolved_injuries
 from v3_model.epa_updater import update_split_state
 
 
 def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFrame,
                coverage: pd.DataFrame, audit: pd.DataFrame, ratings: pd.DataFrame,
-               availability: pd.DataFrame, season: int, week: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+               availability: pd.DataFrame, season: int, week: int,
+               market_snapshots: pd.DataFrame | None = None,
+               asof: pd.Timestamp | None = None,
+               injury_queue: pd.DataFrame | None = None,
+               continuing_absences: pd.DataFrame | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     history = history.loc[history.season.eq(season) & history.week.lt(week)].copy()
     state = update_split_state(priors[["team", "offense_strength", "defense_strength"]], history, season, week)
     games = schedule.loc[schedule.season.eq(season) & schedule.week.eq(week)].copy()
@@ -32,7 +38,9 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
     board["persistent_margin"] = board.home_team.map(strength) - board.away_team.map(strength)
     board["hfa_component"] = (~board.neutral_site).astype(float) * 2.2
     board["market_adjustment"] = 0.0
-    board["market_home_spread"] = pd.to_numeric(board.spread_line, errors="coerce")
+    board = attach_market_snapshot(
+        board, market_snapshots if market_snapshots is not None else pd.DataFrame(),
+        asof if asof is not None else pd.Timestamp.now(tz="UTC"))
     board["qb_adjustment"] = 0.0
     board["qb_availability_notes"] = ""
     board["def_availability_notes"] = ""
@@ -113,7 +121,24 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
         )
     board["edge_points"] = (board.fair_home_spread_v3 - board.market_home_spread).abs()
     board["model_side"] = board.apply(
-        lambda r: r.home_team if r.fair_home_spread_v3 > r.market_home_spread else r.away_team, axis=1)
+        lambda r: (r.home_team if r.fair_home_spread_v3 > r.market_home_spread else r.away_team)
+        if pd.notna(r.market_home_spread) else pd.NA, axis=1)
+    unresolved = unresolved_injuries(
+        injury_queue if injury_queue is not None else pd.DataFrame(),
+        continuing_absences if continuing_absences is not None else pd.DataFrame(),
+        availability, season, week)
+    board["unpriced_injury_notes"] = ""
+    for row in unresolved.itertuples(index=False):
+        mask = board.home_team.eq(row.team) | board.away_team.eq(row.team)
+        note = f"{row.player}: {row.reason}"
+        board.loc[mask, "unpriced_injury_notes"] = board.loc[mask, "unpriced_injury_notes"].map(
+            lambda current: f"{current}; {note}" if current else note)
+    blocked = board.unpriced_injury_notes.ne("")
+    board.loc[blocked, "edge_points"] = float("nan")
+    board.loc[blocked, "model_side"] = pd.NA
+    board["edge_status"] = "READY"
+    board.loc[board.market_home_spread.isna(), "edge_status"] = "MARKET_QUOTE_MISSING_OR_STALE"
+    board.loc[blocked, "edge_status"] = "INJURY_REVIEW_REQUIRED"
     board["data_through_week"] = int(history.week.max()) if not history.empty else 0
     board["games_in_epa_history"] = history.game_id.nunique()
     return board.drop(columns=["location", "spread_line"]), state
@@ -125,12 +150,18 @@ def main() -> None:
         parser.add_argument(f"--{name}", type=Path, required=True)
     parser.add_argument("--season", type=int, required=True)
     parser.add_argument("--week", type=int, required=True)
+    parser.add_argument("--market-snapshots", type=Path, required=True)
+    parser.add_argument("--injury-queue", type=Path, required=True)
+    parser.add_argument("--continuing-absences", type=Path, required=True)
     args = parser.parse_args()
     availability = load_early_availability(args.availability, args.season, args.week)
     board, state = build_week(
         pd.read_csv(args.history), pd.read_csv(args.priors), pd.read_csv(args.schedule),
         pd.read_csv(args.coverage), pd.read_csv(args.audit, dtype={"gsis_id": "string"}),
-        pd.read_csv(args.ratings, dtype={"gsis_id": "string"}), availability, args.season, args.week)
+        pd.read_csv(args.ratings, dtype={"gsis_id": "string"}), availability, args.season, args.week,
+        pd.read_csv(args.market_snapshots) if args.market_snapshots.exists() else pd.DataFrame(),
+        injury_queue=pd.read_csv(args.injury_queue) if args.injury_queue.exists() else pd.DataFrame(),
+        continuing_absences=pd.read_csv(args.continuing_absences) if args.continuing_absences.exists() else pd.DataFrame())
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.state_out.parent.mkdir(parents=True, exist_ok=True)
     board.to_csv(args.out, index=False)

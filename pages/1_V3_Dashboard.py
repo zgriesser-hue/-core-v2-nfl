@@ -85,7 +85,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from parlay_live import fetch_live_lines, format_american, format_spread, rebuild_board
+from parlay_live import CORE_CONSENSUS_BOOKS, fetch_live_lines, format_american, format_spread, rebuild_board
 from pregame_filter import select_pregame_game_keys
 from core_v2 import bet_tracking
 from scripts.v3_performance import grade_releases
@@ -271,6 +271,15 @@ if archived_board:
     )
 else:
     base_board = base_board.loc[base_board["game_key"].astype(str).isin(active_game_keys)].copy()
+    stamps = (pd.to_datetime(base_board["market_snapshot_timestamp_utc"], utc=True,
+                             errors="coerce", format="mixed")
+              if "market_snapshot_timestamp_utc" in base_board else
+              pd.Series(pd.NaT, index=base_board.index, dtype="datetime64[ns, UTC]"))
+    age = pd.Timestamp.now(tz="UTC") - stamps
+    stale_board_quote = stamps.isna() | age.lt(pd.Timedelta(0)) | age.gt(pd.Timedelta(hours=4))
+    base_board.loc[stale_board_quote, "market_home_spread"] = float("nan")
+    base_board.loc[stale_board_quote, "edge_points"] = float("nan")
+    base_board.loc[stale_board_quote, "model_side"] = pd.NA
 
 for key in ["v3_live_lines", "v3_live_metadata", "v3_refresh_error"]:
     if key not in st.session_state:
@@ -320,14 +329,48 @@ current_lines = (
     st.session_state.v3_live_lines if st.session_state.v3_live_lines is not None else static_lines
 )
 
+# A repository snapshot can be hours old even when its stored quote_status
+# still says ACTIVE. Re-evaluate quote age when the page is viewed.
+if not archived_board and not current_lines.empty:
+    current_lines = current_lines.copy()
+    observed_col = ("spread_observed_timestamp_et" if "spread_observed_timestamp_et" in current_lines
+                    else "market_snapshot_timestamp_et")
+    observed = pd.to_datetime(current_lines[observed_col], utc=True, errors="coerce", format="mixed")
+    age = pd.Timestamp.now(tz="UTC") - observed
+    recent = observed.notna() & age.ge(pd.Timedelta(0)) & age.le(pd.Timedelta(hours=4))
+    stale_count = int((~recent).sum())
+    current_lines = current_lines.loc[recent].copy()
+    current_lines["quote_age_minutes"] = age.loc[recent].dt.total_seconds() / 60
+    current_lines["quote_status"] = current_lines["quote_age_minutes"].map(
+        lambda minutes: "CURRENT" if minutes <= 15 else "AGING — VERIFY")
+    if "book_feed_status" in current_lines:
+        current_lines = current_lines.loc[current_lines.book_feed_status.eq("ACTIVE")].copy()
+    if stale_count:
+        st.warning(f"{stale_count} market quotes are over four hours old or lack a valid timestamp and were excluded.")
+    if current_lines.empty:
+        st.warning("No recent captured market lines. V3 fair lines remain visible; market edges require a fresh pull.")
+
 used_live_or_static_lines = not current_lines.empty
 
 try:
-    board = rebuild_board(base_board, current_lines) if used_live_or_static_lines else base_board.copy()
+    if used_live_or_static_lines:
+        core = current_lines.loc[current_lines.sportsbook.isin(CORE_CONSENSUS_BOOKS)]
+        quoted = set(zip(core.away_team, core.home_team))
+        matched = pd.Series(list(zip(base_board.away_team, base_board.home_team)),
+                            index=base_board.index).isin(quoted)
+        priced = rebuild_board(base_board.loc[matched], current_lines) if matched.any() else pd.DataFrame()
+        priced["_market_rebuilt"] = True
+        fallback = base_board.loc[~matched].copy()
+        fallback["_market_rebuilt"] = False
+        board = pd.concat([priced, fallback], ignore_index=True)
+    else:
+        board = base_board.copy()
+        board["_market_rebuilt"] = False
 except Exception as exc:
     st.error(f"The current market data could not produce a valid board: {type(exc).__name__}: {exc}")
     board = base_board.copy()
     used_live_or_static_lines = False
+    board["_market_rebuilt"] = False
 
 # Display columns, always in bookmaker convention (negative = home
 # favored) since that's what display_home_line expects - see
@@ -339,19 +382,15 @@ except Exception as exc:
 # works identically either way.
 board["fair_display"] = -board["fair_home_spread_v3"]
 
-if used_live_or_static_lines:
-    # rebuild_board just computed market_home_spread fresh from live/
-    # static sportsbook quotes - already bookmaker convention.
-    board["market_display"] = board["market_home_spread"]
-else:
-    # No live or static lines at all - falling back to board.py's own
-    # baked-in market_home_spread, which is margin convention (from
-    # market_home_margin) like fair_home_spread_v3, so needs the same
-    # flip. model_side/edge_points in this fallback path are board.py's
-    # own precomputed values and are already correct as-is (edge_points
-    # is a symmetric abs() difference; model_side was fixed to use
-    # margin convention directly in board.py).
-    board["market_display"] = -board["market_home_spread"]
+board["market_display"] = board["market_home_spread"].where(
+    board["_market_rebuilt"], -board["market_home_spread"])
+if "unpriced_injury_notes" in board:
+    pending_injury = board.unpriced_injury_notes.fillna("").ne("")
+    board.loc[pending_injury, "edge_points"] = float("nan")
+    board.loc[pending_injury, "model_side"] = pd.NA
+    if pending_injury.any():
+        st.warning(f"{int(pending_injury.sum())} game(s) have a known injury awaiting current-week review. "
+                   "Their fair lines are shown, but their betting edges are withheld.")
 
 st.sidebar.header("V3 Controls")
 
@@ -384,7 +423,7 @@ with tab1:
     m1, m2, m3 = st.columns(3)
     m1.metric("Games", len(board))
     m2.metric("Disagreements \u22651", int((board["edge_points"] >= 1).sum()))
-    m3.metric("Mean |edge|", f'{board["edge_points"].mean():.2f}' if len(board) else "\u2014")
+    m3.metric("Mean |edge|", f'{board["edge_points"].mean():.2f}' if board["edge_points"].notna().any() else "\u2014")
 
     display = pd.DataFrame(
         {
@@ -422,8 +461,8 @@ with tab2:
     c1, c2, c3 = st.columns(3)
     c1.metric("V3 Fair Line", display_home_line(row["away_team"], row["home_team"], row["fair_display"]))
     c1.metric("Market", display_home_line(row["away_team"], row["home_team"], row["market_display"]))
-    c2.metric("Disagreement", f'{row["edge_points"]:.2f} pts')
-    c2.metric("Lean", row["model_side"])
+    c2.metric("Disagreement", f'{row["edge_points"]:.2f} pts' if pd.notna(row["edge_points"]) else "\u2014")
+    c2.metric("Lean", row["model_side"] if pd.notna(row["model_side"]) else "\u2014")
     if "pred_v30" in row:
         c3.metric("pred_v30 (base)", f'{row["pred_v30"]:.2f}')
     if "market_adjustment" in row:
@@ -434,6 +473,8 @@ with tab2:
 
     if "def_availability_notes" in row and pd.notna(row["def_availability_notes"]) and str(row["def_availability_notes"]).strip():
         st.caption("Known defensive outs: " + str(row["def_availability_notes"]))
+    if "unpriced_injury_notes" in row and pd.notna(row["unpriced_injury_notes"]) and str(row["unpriced_injury_notes"]).strip():
+        st.warning("Injury review required: " + str(row["unpriced_injury_notes"]))
 
     if "personnel_adjustment" in row and "neutral_hfa_adjustment" in row:
         st.caption(
@@ -623,8 +664,11 @@ with tab5:
         display_bets_v3["Stake"]=pd.to_numeric(display_bets_v3["stake"],errors="coerce").map(lambda x:f"USD {x:.2f}")
         display_bets_v3["Result"]=display_bets_v3["actual_bet_result"].fillna("Pending")
         display_bets_v3["P/L"]=pd.to_numeric(display_bets_v3["profit_loss"],errors="coerce").map(lambda x:f"USD {x:+.2f}" if pd.notna(x) else "Pending")
+        display_bets_v3["Bet CLV"] = pd.to_numeric(
+            display_bets_v3["actual_bet_clv_points"], errors="coerce"
+        ).map(lambda x: f"{x:+.2f}" if pd.notna(x) else "—")
         st.dataframe(
-            display_bets_v3[["week","matchup","bet_type","Bet","sportsbook","Stake","V3 backing","Result","P/L"]]
+            display_bets_v3[["week","matchup","bet_type","Bet","sportsbook","Stake","V3 backing","Result","P/L","Bet CLV"]]
             .rename(columns={"week":"Week","matchup":"Matchup","bet_type":"Type","sportsbook":"Book"})
             .sort_values("Week",ascending=False),
             use_container_width=True,hide_index=True
@@ -636,6 +680,8 @@ with tab5:
         m2.metric("Gain / loss",f"USD {overall['profit_loss']:+.2f}")
         backed=display_bets_v3["V3 backing"].eq("Backed by V3").sum()
         m3.metric("Spread bets backed by V3",int(backed))
+        st.caption("Bet CLV compares your entered line with the captured close; total CLV uses the closing total. "
+                   "It is separate from the V3 projection-versus-close result in Model Performance.")
 
 
 with tab6:

@@ -8,6 +8,11 @@ on:
       - ".github/workflows/v3_weekly_board.yml"
       - "pages/1_V3_Dashboard.py"
       - "scripts/v3_performance.py"
+      - "scripts/v3_market_snapshot.py"
+      - "scripts/v3_injury_guard.py"
+      - "data/model/continuing_absences_*.csv"
+      - "data/monitor/injury_review_queue_*.csv"
+      - "data/tracking/projection_market_snapshots.csv"
       - "data/model/early_availability_*.csv"
   pull_request:
     paths:
@@ -15,6 +20,8 @@ on:
       - ".github/workflows/v3_weekly_board.yml"
       - "pages/1_V3_Dashboard.py"
       - "scripts/v3_performance.py"
+      - "scripts/v3_market_snapshot.py"
+      - "scripts/v3_injury_guard.py"
       - "data/model/early_availability_*.csv"
   schedule:
     - cron: "45 14 * * 1,2"
@@ -90,6 +97,9 @@ jobs:
             --audit "$OUTPUT_DIR/personnel_player_audit.csv" \
             --ratings "data/model/v3_player_pvar_${TARGET_SEASON}.csv" \
             --availability "data/model/early_availability_${TARGET_SEASON}.csv" \
+            --market-snapshots data/tracking/projection_market_snapshots.csv \
+            --injury-queue "data/monitor/injury_review_queue_${TARGET_SEASON}.csv" \
+            --continuing-absences "data/model/continuing_absences_${TARGET_SEASON}.csv" \
             --state-out "data/research/v3/week_${WEEK_PADDED}_v3_state.csv" \
             --out "data/research/v3/week_${WEEK_PADDED}_v3_board.csv"
           cp "data/research/v3/week_${WEEK_PADDED}_v3_board.csv" week_v3_board.csv
