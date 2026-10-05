@@ -262,7 +262,15 @@ def normalize_existing_lines(lines):
     return lines
 
 
-def fetch_live_lines(api_key, season, week, active_game_keys):
+def fetch_live_lines(
+    api_key,
+    season,
+    week,
+    active_game_keys,
+    minimum_core_books=3,
+):
+    if minimum_core_books < 1:
+        raise ValueError("minimum_core_books must be at least one.")
     snapshot_dt = datetime.now(
         ZoneInfo("America/New_York")
     )
@@ -591,12 +599,12 @@ def fetch_live_lines(api_key, season, week, active_game_keys):
     insufficient = [
         key
         for key in active_game_keys
-        if core_counts.get(key, 0) < 3
+        if core_counts.get(key, 0) < minimum_core_books
     ]
 
     if insufficient:
         raise RuntimeError(
-            "Fewer than three core books were available for: "
+            f"Fewer than {minimum_core_books} core books were available for: "
             + ", ".join(sorted(insufficient))
         )
 
