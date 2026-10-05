@@ -121,6 +121,7 @@ def cached_live_refresh(refresh_bucket, season, week, active_game_keys):
         season=season,
         week=week,
         active_game_keys=set(active_game_keys),
+        minimum_core_books=2,
     )
 
 
