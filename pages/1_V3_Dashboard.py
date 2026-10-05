@@ -559,7 +559,9 @@ with tab4:
 
     st.markdown("#### V3 release ATS and closing line")
     st.caption("Uses the first timestamped V3 release with a captured pregame market quote. "
-               "ATS is at that quoted spread. Projection vs close is the V3 fair line's "
+               "Release, opener, and close ATS grade that same saved model side at three different lines. "
+               "The opener is the first observed core-book consensus; a later model pick makes its opener result hypothetical. "
+               "Projection vs close is the V3 fair line's "
                "signed edge on its original side at the captured close; market CLV is "
                "the original market spread against the close. These are distinct from "
                "your actual wagers in My Bets. Older archive-only games are excluded.")
@@ -571,8 +573,14 @@ with tab4:
         releases = load_csv(str(release_path), release_path.stat().st_mtime_ns)
         closes = load_csv(str(close_path), close_path.stat().st_mtime_ns)
         outcomes = load_csv(str(shared_grades_path), shared_grades_path.stat().st_mtime_ns)
+        opener_frames = []
+        for season, week in releases[["season", "week"]].drop_duplicates().itertuples(index=False, name=None):
+            opener_path = ROOT / "data" / "market" / str(int(season)) / f"week_{int(week):02d}" / "consensus_openers.csv"
+            if opener_path.exists():
+                opener_frames.append(load_csv(str(opener_path), opener_path.stat().st_mtime_ns))
+        openers = pd.concat(opener_frames, ignore_index=True) if opener_frames else pd.DataFrame()
         try:
-            vg = grade_releases(releases, outcomes, closes)
+            vg = grade_releases(releases, outcomes, closes, openers)
         except ValueError as exc:
             st.error(f"V3 release grading stopped: {exc}")
         else:
@@ -589,16 +597,29 @@ with tab4:
                 b.metric("Graded release MAE", f"{completed_v3.absolute_error.mean():.2f}" if len(completed_v3) else "—")
                 c.metric("Projection vs close", f"{valid_close_v3.projection_vs_close_points.mean():+.2f}" if len(valid_close_v3) else "—")
                 d.metric("Market CLV", f"{valid_close_v3.market_clv_points.mean():+.2f}" if len(valid_close_v3) else "—")
+                open_scored = vg.loc[vg.opener_ats_result.ne("Pending")]
+                close_scored = vg.loc[vg.close_ats_result.ne("Pending")]
+                e, f = st.columns(2)
+                e.metric("V3 side at opener ATS", f"{int(open_scored.opener_ats_result.eq('Win').sum())}-"
+                         f"{int(open_scored.opener_ats_result.eq('Loss').sum())}-"
+                         f"{int(open_scored.opener_ats_result.eq('Push').sum())}")
+                f.metric("V3 side at close ATS", f"{int(close_scored.close_ats_result.eq('Win').sum())}-"
+                         f"{int(close_scored.close_ats_result.eq('Loss').sum())}-"
+                         f"{int(close_scored.close_ats_result.eq('Push').sum())}")
                 st.caption(f"{len(completed_v3)} scored releases; {len(valid_close_v3)} valid captured closes. "
+                           f"{len(open_scored)} opener and {len(close_scored)} close ATS grades. "
                            "Pushes are excluded from win rate. No ROI is inferred without bet odds.")
                 shown = vg[["week", "away_team", "home_team", "release_timestamp_utc",
                             "model_side", "fair_home_margin_v3", "release_market_home_spread",
-                            "closing_home_spread", "ats_result", "projection_vs_close_points",
+                            "consensus_open_home_spread", "earliest_core_open_seen_utc", "opener_timing",
+                            "closing_home_spread", "ats_result", "opener_ats_result", "close_ats_result",
+                            "projection_vs_close_points",
                             "market_clv_points"]].copy()
                 shown["matchup"] = shown.away_team + " @ " + shown.home_team
                 st.dataframe(shown[["week", "matchup", "release_timestamp_utc", "model_side",
                                     "fair_home_margin_v3", "release_market_home_spread",
-                                    "closing_home_spread", "ats_result", "projection_vs_close_points",
+                                    "consensus_open_home_spread", "opener_timing", "opener_ats_result",
+                                    "closing_home_spread", "close_ats_result", "ats_result", "projection_vs_close_points",
                                     "market_clv_points"]].sort_values("week", ascending=False),
                              use_container_width=True, hide_index=True)
 
