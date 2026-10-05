@@ -486,27 +486,44 @@ with tab2:
 with tab3:
     st.subheader("V3 Power Ratings")
     st.caption("Pregame V3 team strength entering this week. Higher is better; centered at league average.")
-    teams = sorted(set(raw_board["away_team"]).union(set(raw_board["home_team"])))
-    # Reconstruct the overall pregame strength directly from the matchup
-    # equations: persistent_margin = home_strength - away_strength.
-    equations=[]
-    values=[]
-    for row in raw_board.itertuples(index=False):
-        x={team:0.0 for team in teams}
-        x[str(row.home_team)]=1.0
-        x[str(row.away_team)]=-1.0
-        equations.append([x[t] for t in teams])
-        values.append(float(row.persistent_margin))
-    # Add a zero-sum centering equation; it changes only the arbitrary level,
-    # never any matchup difference.
-    import numpy as np
-    A=np.asarray(equations+[([1.0]*len(teams))],dtype=float)
-    y=np.asarray(values+[0.0],dtype=float)
-    ratings, *_=np.linalg.lstsq(A,y,rcond=None)
-    rating_df=pd.DataFrame({"Team":teams,"V3 Power Rating":ratings}).sort_values("V3 Power Rating",ascending=False)
-    rating_df["V3 Power Rating"]=rating_df["V3 Power Rating"].round(2)
-    st.dataframe(rating_df,use_container_width=True,hide_index=True)
-    st.caption("These are relative overall team-strength ratings reconstructed from V3's saved pregame state; HFA, personnel, market and neutral-site adjustments are not included.")
+    state_path = ROOT / "data" / "research" / "v3" / f"week_{active_week:02d}_v3_state.csv"
+    if not state_path.exists():
+        st.warning(f"Saved V3 team state is missing for Week {active_week}; power ratings cannot be displayed.")
+    else:
+        team_state = load_csv(str(state_path), state_path.stat().st_mtime_ns)
+        state_cols = {"team", "offense_strength", "defense_strength"}
+        if not state_cols.issubset(team_state.columns):
+            st.error(f"Saved V3 state is missing expected columns: {sorted(state_cols - set(team_state.columns))}")
+        elif team_state["team"].duplicated().any():
+            st.error("Saved V3 state contains duplicate teams; power ratings cannot be displayed safely.")
+        else:
+            team_state = team_state.copy()
+            team_state["offense_strength"] = pd.to_numeric(team_state["offense_strength"], errors="coerce")
+            team_state["defense_strength"] = pd.to_numeric(team_state["defense_strength"], errors="coerce")
+            team_state["V3 Power Rating"] = team_state["offense_strength"] + team_state["defense_strength"]
+            team_state["V3 Power Rating"] -= team_state["V3 Power Rating"].mean()
+            scheduled_teams = set(raw_board["away_team"].astype(str)).union(
+                set(raw_board["home_team"].astype(str))
+            )
+            missing_teams = scheduled_teams - set(team_state["team"].astype(str))
+            if missing_teams:
+                st.error(f"Saved V3 state is missing teams on this week's board: {sorted(missing_teams)}")
+            else:
+                rating_df = team_state.rename(columns={
+                    "team": "Team",
+                    "offense_strength": "Offense",
+                    "defense_strength": "Defense",
+                })[["Team", "Offense", "Defense", "V3 Power Rating"]]
+                rating_df = rating_df.sort_values("V3 Power Rating", ascending=False)
+                rating_df[["Offense", "Defense", "V3 Power Rating"]] = rating_df[
+                    ["Offense", "Defense", "V3 Power Rating"]
+                ].round(2)
+                st.dataframe(rating_df, use_container_width=True, hide_index=True)
+                st.caption(
+                    "Overall rating = offense strength + defense strength, centered at the 32-team average. "
+                    "The saved matchup projection starts with home rating − away rating, then adds HFA "
+                    "and the game-specific adjustments shown on the board."
+                )
 
 with tab4:
     st.subheader("V3 Model Performance")
