@@ -78,11 +78,14 @@ IMPORTANT - shared resources with Core V2:
   cache is keyed per page/function, not shared between the two pages.
 """
 
+import importlib
+import inspect
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import parlay_live
 import streamlit as st
 
 from parlay_live import CORE_CONSENSUS_BOOKS, fetch_live_lines, format_american, format_spread, rebuild_board
@@ -116,7 +119,15 @@ def load_csv(path_string, file_mtime_ns=None):
 @st.cache_data(ttl=900, show_spinner=False)
 def cached_live_refresh(refresh_bucket, season, week, active_game_keys):
     del refresh_bucket  # only used to key the 15-minute cache bucket
-    return fetch_live_lines(
+    refresh_fetch = fetch_live_lines
+    if "minimum_core_books" not in inspect.signature(refresh_fetch).parameters:
+        # Streamlit may retain an older imported module after the page updates.
+        refresh_fetch = importlib.reload(parlay_live).fetch_live_lines
+    if "minimum_core_books" not in inspect.signature(refresh_fetch).parameters:
+        raise RuntimeError(
+            "The loaded odds module is outdated; restart the Streamlit app and retry."
+        )
+    return refresh_fetch(
         api_key=st.secrets["PARLAY_API_KEY"],
         season=season,
         week=week,
