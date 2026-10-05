@@ -29,7 +29,7 @@ def test_audit_flags_missing_and_rejects_postkick_quote():
         {"season": 2026, "week": 4, "game_type": "REG", "gameday": "2026-10-04",
          "gametime": "16:25", "away_team": "B", "home_team": "J"},
     ])
-    now = pd.Timestamp("2026-10-04T21:00Z")
+    now = pd.Timestamp("2026-10-04T20:50Z")
     closes = pd.DataFrame([{"game_key": "2026_W4_A_H", "closing_home_spread": -3.0,
                              "snapshot_timestamp_utc": "2026-10-04T17:01Z",
                              "kickoff_utc": "2026-10-04T17:00Z"}])
