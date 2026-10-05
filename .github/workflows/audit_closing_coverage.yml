@@ -1,0 +1,48 @@
+name: Audit missing pregame closes
+
+on:
+  schedule:
+    - cron: "40 16-23 * * 0,1,4"
+    - cron: "40 0-3 * * 1,2,5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -e .
+      - name: Audit recent completed games
+        run: |
+          python -m scripts.audit_closing_coverage \
+            --schedule data/schedules/schedule_2026.csv \
+            --closes data/tracking/closing_consensus.csv \
+            --report missing_close_report.md
+          if [ -s missing_close_report.md ]; then
+            cat missing_close_report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Open or update missing-close alert
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [ ! -s missing_close_report.md ]; then
+            echo "All recently completed games have validated closes"
+            exit 0
+          fi
+          TITLE="Missing 2026 pregame closing lines"
+          NUMBER=$(gh issue list --state open --limit 100 --json number,title \
+            --jq '.[] | select(.title == "Missing 2026 pregame closing lines") | .number' | head -1)
+          if [ -n "$NUMBER" ]; then
+            gh issue edit "$NUMBER" --body-file missing_close_report.md
+          else
+            gh issue create --title "$TITLE" --body-file missing_close_report.md
+          fi
