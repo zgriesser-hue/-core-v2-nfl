@@ -91,7 +91,7 @@ def append_releases(board: pd.DataFrame, schedule: pd.DataFrame,
 
 
 def grade_releases(releases: pd.DataFrame, grades: pd.DataFrame,
-                   closes: pd.DataFrame) -> pd.DataFrame:
+                   closes: pd.DataFrame, openers: pd.DataFrame | None = None) -> pd.DataFrame:
     """Grade first V3 release only. Fair margins are positive for home."""
     if releases.empty:
         return pd.DataFrame()
@@ -112,14 +112,30 @@ def grade_releases(releases: pd.DataFrame, grades: pd.DataFrame,
         raise ValueError("Duplicate grades or closes")
     result = first.merge(grades[["game_key", "away_score", "home_score"]], on="game_key", how="left", validate="one_to_one")
     result = result.merge(closes[["game_key", "closing_home_spread", "snapshot_timestamp_utc", "kickoff_utc"]].rename(columns={"kickoff_utc":"closing_kickoff_utc"}), on="game_key", how="left", validate="one_to_one")
+    if openers is None or openers.empty:
+        openers = pd.DataFrame(columns=["game_key", "consensus_open_home_spread", "earliest_core_open_seen_utc"])
+    if openers.game_key.duplicated().any():
+        raise ValueError("Duplicate opener games")
+    result = result.merge(openers[["game_key", "consensus_open_home_spread", "earliest_core_open_seen_utc"]],
+                          on="game_key", how="left", validate="one_to_one")
     for col in ("fair_home_margin_v3", "release_market_home_spread", "closing_home_spread", "away_score", "home_score"):
         result[col] = pd.to_numeric(result[col], errors="coerce")
+    result["consensus_open_home_spread"] = pd.to_numeric(result.consensus_open_home_spread, errors="coerce")
     result["actual_home_margin"] = result.home_score - result.away_score
     result["absolute_error"] = (result.actual_home_margin - result.fair_home_margin_v3).abs()
     # A captured close must be later than release and earlier than kickoff.
     valid_close = (_utc(result.snapshot_timestamp_utc) >= _utc(result.release_timestamp_utc)) & (
         _utc(result.snapshot_timestamp_utc) < _utc(result.kickoff_utc)) & result.closing_home_spread.notna()
     result.loc[~valid_close, "closing_home_spread"] = float("nan")
+    # Openers are first observed core-book quotes, not necessarily the true market open.
+    # Grade the saved model side hypothetically even when it was selected after capture.
+    valid_open = _utc(result.earliest_core_open_seen_utc).notna() & (
+        _utc(result.earliest_core_open_seen_utc) < _utc(result.kickoff_utc)) & result.consensus_open_home_spread.notna()
+    result.loc[~valid_open, "consensus_open_home_spread"] = float("nan")
+    result["opener_timing"] = "Unavailable"
+    result.loc[valid_open, "opener_timing"] = "Hypothetical (pick after opener)"
+    result.loc[valid_open & (_utc(result.release_timestamp_utc) <= _utc(result.earliest_core_open_seen_utc)),
+               "opener_timing"] = "Pick available at capture"
     # ATS is model side at release, graded at that release's market spread.
     home_side = result.model_side.eq(result.home_team)
     away_side = result.model_side.eq(result.away_team)
@@ -127,6 +143,12 @@ def grade_releases(releases: pd.DataFrame, grades: pd.DataFrame,
     result["ats_margin"] = side_margin.where(home_side, -side_margin.where(away_side))
     result.loc[result.actual_home_margin.isna() | result.release_market_home_spread.isna(), "ats_margin"] = float("nan")
     result["ats_result"] = result.ats_margin.map(lambda x: "Win" if x > 0 else "Loss" if x < 0 else "Push" if pd.notna(x) else "Pending")
+    for name, line in (("opener", "consensus_open_home_spread"), ("close", "closing_home_spread")):
+        margin = result.actual_home_margin + result[line]
+        result[f"{name}_ats_margin"] = margin.where(home_side, -margin.where(away_side))
+        result.loc[result.actual_home_margin.isna() | result[line].isna(), f"{name}_ats_margin"] = float("nan")
+        result[f"{name}_ats_result"] = result[f"{name}_ats_margin"].map(
+            lambda x: "Win" if x > 0 else "Loss" if x < 0 else "Push" if pd.notna(x) else "Pending")
     # Projection vs close is the signed V3 edge at close for the release side.
     close_edge = result.fair_home_margin_v3 + result.closing_home_spread
     result["projection_vs_close_points"] = close_edge.where(home_side, -close_edge.where(away_side))
