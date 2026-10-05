@@ -2,8 +2,8 @@ name: Capture pregame closing lines
 
 on:
   schedule:
-    # Hourly during NFL season months. The Python guard makes no API request
-    # unless a scheduled game is within 75 minutes of kickoff.
+    # Hourly redundancy. A started worker can wait through missing cron events;
+    # it makes no API request until shortly before a scheduled kickoff.
     - cron: "5 * * 1,2,9,10,11,12 *"
   workflow_dispatch:
 
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 80
+    timeout-minutes: 355
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,13 +40,13 @@ jobs:
       - name: Commit captured close
         shell: bash
         run: |
-          if git diff --quiet -- data/market/; then
+          if [ -z "$(git status --porcelain -- data/market/ data/tracking/closing_consensus.csv)" ]; then
             echo "No close capture due; nothing to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/market/
+          git add data/market/ data/tracking/closing_consensus.csv
           git commit -m "data: capture pregame closing lines"
           git pull --rebase origin main
           git push origin HEAD:main
