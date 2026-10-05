@@ -580,8 +580,16 @@ with tab4:
                 opener_frames.append(load_csv(str(opener_path), opener_path.stat().st_mtime_ns))
         openers = pd.concat(opener_frames, ignore_index=True) if opener_frames else pd.DataFrame()
         try:
+            # Streamlit can rerun this page while retaining an older imported
+            # module after a deployment. Refresh it when the new opener-aware
+            # signature is absent rather than crashing the whole dashboard.
+            import inspect
+            if "openers" not in inspect.signature(grade_releases).parameters:
+                import importlib
+                import scripts.v3_performance as performance_module
+                grade_releases = importlib.reload(performance_module).grade_releases
             vg = grade_releases(releases, outcomes, closes, openers)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:
             st.error(f"V3 release grading stopped: {exc}")
         else:
             if vg.empty:
