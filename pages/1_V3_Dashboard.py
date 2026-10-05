@@ -418,7 +418,10 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
 )
 
 with tab1:
-    filtered = board.loc[board["edge_points"] >= minimum_edge].copy()
+    edge_values = pd.to_numeric(board["edge_points"], errors="coerce")
+    # Keep unpriced games visible so their V3 fair lines remain available
+    # when the market snapshot is stale or injury review withholds an edge.
+    filtered = board.loc[edge_values.isna() | edge_values.ge(minimum_edge)].copy()
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Games", len(board))
