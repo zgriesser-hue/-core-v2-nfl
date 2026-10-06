@@ -120,10 +120,11 @@ def load_csv(path_string, file_mtime_ns=None):
 def cached_live_refresh(refresh_bucket, season, week, active_game_keys):
     del refresh_bucket  # only used to key the 15-minute cache bucket
     refresh_fetch = fetch_live_lines
-    if "minimum_core_books" not in inspect.signature(refresh_fetch).parameters:
+    required_options = {"minimum_core_books", "allow_partial"}
+    if not required_options.issubset(inspect.signature(refresh_fetch).parameters):
         # Streamlit may retain an older imported module after the page updates.
         refresh_fetch = importlib.reload(parlay_live).fetch_live_lines
-    if "minimum_core_books" not in inspect.signature(refresh_fetch).parameters:
+    if not required_options.issubset(inspect.signature(refresh_fetch).parameters):
         raise RuntimeError(
             "The loaded odds module is outdated; restart the Streamlit app and retry."
         )
@@ -133,6 +134,7 @@ def cached_live_refresh(refresh_bucket, season, week, active_game_keys):
         week=week,
         active_game_keys=set(active_game_keys),
         minimum_core_books=2,
+        allow_partial=True,
     )
 
 
@@ -335,6 +337,15 @@ if st.session_state.v3_refresh_error:
         "Live refresh failed validation. The board's static snapshot remains active.\n\n"
         + st.session_state.v3_refresh_error
     )
+if st.session_state.v3_live_metadata and not archived_board:
+    unavailable_games = st.session_state.v3_live_metadata.get(
+        "market_unavailable_games", []
+    )
+    if unavailable_games:
+        st.warning(
+            f"Live market comparison is unavailable for {len(unavailable_games)} game(s) "
+            "with fewer than two current core books. Their V3 fair lines remain on the board."
+        )
 
 current_lines = (
     pd.DataFrame() if archived_board else
@@ -367,14 +378,27 @@ used_live_or_static_lines = not current_lines.empty
 try:
     if used_live_or_static_lines:
         core = current_lines.loc[current_lines.sportsbook.isin(CORE_CONSENSUS_BOOKS)]
-        quoted = set(zip(core.away_team, core.home_team))
-        matched = pd.Series(list(zip(base_board.away_team, base_board.home_team)),
-                            index=base_board.index).isin(quoted)
-        priced = rebuild_board(base_board.loc[matched], current_lines) if matched.any() else pd.DataFrame()
-        priced["_market_rebuilt"] = True
-        fallback = base_board.loc[~matched].copy()
-        fallback["_market_rebuilt"] = False
-        board = pd.concat([priced, fallback], ignore_index=True)
+        core_counts = core.groupby(["away_team", "home_team"])["sportsbook"].nunique()
+        quoted = set(core_counts.loc[core_counts >= 2].index)
+        matchup_keys = pd.Series(
+            list(zip(base_board.away_team, base_board.home_team)),
+            index=base_board.index,
+        )
+        matched = matchup_keys.isin(quoted)
+        eligible_matchups = pd.Series(
+            list(zip(current_lines.away_team, current_lines.home_team)),
+            index=current_lines.index,
+        ).isin(quoted)
+        eligible_lines = current_lines.loc[eligible_matchups]
+        if matched.any():
+            priced = rebuild_board(base_board.loc[matched], eligible_lines)
+            priced["_market_rebuilt"] = True
+            fallback = base_board.loc[~matched].copy()
+            fallback["_market_rebuilt"] = False
+            board = pd.concat([priced, fallback], ignore_index=True)
+        else:
+            board = base_board.copy()
+            board["_market_rebuilt"] = False
     else:
         board = base_board.copy()
         board["_market_rebuilt"] = False
