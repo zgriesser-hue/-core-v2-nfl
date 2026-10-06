@@ -268,6 +268,7 @@ def fetch_live_lines(
     week,
     active_game_keys,
     minimum_core_books=3,
+    allow_partial=False,
 ):
     if minimum_core_books < 1:
         raise ValueError("minimum_core_books must be at least one.")
@@ -514,7 +515,7 @@ def fetch_live_lines(
         - matched_game_keys
     )
 
-    if missing_games:
+    if missing_games and not allow_partial:
         raise RuntimeError(
             "The API response was missing games: "
             + ", ".join(sorted(missing_games))
@@ -602,7 +603,7 @@ def fetch_live_lines(
         if core_counts.get(key, 0) < minimum_core_books
     ]
 
-    if insufficient:
+    if insufficient and not allow_partial:
         raise RuntimeError(
             f"Fewer than {minimum_core_books} core books were available for: "
             + ", ".join(sorted(insufficient))
@@ -614,6 +615,10 @@ def fetch_live_lines(
         "user_rows": len(user_quotes),
         "games": quotes["game_key"].nunique(),
         "books": quotes["sportsbook"].nunique(),
+        "market_unavailable_games": sorted(
+            set(active_game_keys)
+            - set(core_counts.loc[core_counts >= minimum_core_books].index)
+        ),
         "requests_used": response.headers.get(
             "x-requests-used",
             response.headers.get("X-Requests-Used"),
