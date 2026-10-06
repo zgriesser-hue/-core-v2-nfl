@@ -1,3 +1,4 @@
 season,week,game_key,away_team,home_team,closing_home_spread,closing_total,closing_away_moneyline,closing_home_moneyline,consensus_books,total_consensus_books,moneyline_consensus_books,snapshot_timestamp_utc,kickoff_utc,closing_method
 2026,4,2026_W4_PIT_CLE,PIT,CLE,2.5,37.5,-149.0,126.5,4,4,4,2026-10-01T23:36:17+00:00,2026-10-02 00:15:00+00:00,MEDIAN_CORE_BOOKS_PREKICK
 2026,4,2026_W4_DET_CAR,DET,CAR,3.75,51.5,-210.0,175.5,4,4,4,2026-10-04T23:36:39+00:00,2026-10-05 00:20:00+00:00,MEDIAN_CORE_BOOKS_PREKICK
+2026,4,2026_W4_ATL_NO,ATL,NO,-1.5,47.5,-105.0,-114.0,4,4,4,2026-10-06T00:03:03+00:00,2026-10-06 00:15:00+00:00,MEDIAN_CORE_BOOKS_PREKICK
