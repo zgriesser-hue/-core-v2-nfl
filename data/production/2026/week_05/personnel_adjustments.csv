@@ -1,5 +1,5 @@
 season,week,game_id,away_team,home_team,personnel_correction_current_clean,personnel_correction_min_clean,personnel_correction_max_clean,report_coverage_complete_clean,personnel_info_complete,week1_personnel_status_clean,away_report_available,home_report_available,away_known_exposure,home_known_exposure,away_unresolved_exposure_max,home_unresolved_exposure_max,manual_adjustment_home,qb_availability_provisional
-2026,5,2026_05_TB_DAL,TB,DAL,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,5,2026_05_TB_DAL,TB,DAL,0.18574686760897785,0.18574686760897785,0.18574686760897785,True,True,READY_WITH_UNCERTAINTY_BAND,True,True,0.6162609251187858,0.3084855252011543,0.0,0.0,0.0,False
 2026,5,2026_05_PHI_JAX,PHI,JAX,0.57,0.57,0.57,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.57,False
 2026,5,2026_05_CIN_MIA,CIN,MIA,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
 2026,5,2026_05_LV_NE,LV,NE,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False

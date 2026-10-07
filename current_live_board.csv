@@ -1,5 +1,5 @@
 season,week,game_key,away_team,home_team,fair_home_spread,fair_spread_low,fair_spread_high,fair_spread_uncertainty_width,projection_display_status,personnel_projection_status,used_personnel_fallback,personnel_info_complete,qb_availability_provisional,core_v2_home_spread,matchup
-2026,5,2026_W5_TB_DAL,TB,DAL,-5.841,-5.841,-5.841,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-5.841,TB @ DAL
+2026,5,2026_W5_TB_DAL,TB,DAL,-6.027,-6.027,-6.027,0.0,UPDATED_PREGAME,UPDATED,False,True,False,-6.027,TB @ DAL
 2026,5,2026_W5_PHI_JAX,PHI,JAX,-3.824,-3.824,-3.824,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-3.824,PHI @ JAX
 2026,5,2026_W5_CIN_MIA,CIN,MIA,5.645,5.645,5.645,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,5.645,CIN @ MIA
 2026,5,2026_W5_LV_NE,LV,NE,-7.456,-7.456,-7.456,0.0,EARLY_PROVISIONAL,PROVISIONAL,True,False,False,-7.456,LV @ NE

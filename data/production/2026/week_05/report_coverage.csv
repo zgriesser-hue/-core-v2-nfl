@@ -6,7 +6,7 @@ BUF,False
 CHI,False
 CIN,False
 CLE,False
-DAL,False
+DAL,True
 DEN,False
 DET,False
 GB,False
@@ -26,6 +26,6 @@ PHI,False
 PIT,False
 SEA,False
 SF,False
-TB,False
+TB,True
 TEN,False
 WAS,False
