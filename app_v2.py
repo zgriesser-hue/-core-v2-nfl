@@ -108,6 +108,8 @@ def cached_live_refresh(
         season=season,
         week=week,
         active_game_keys=set(active_game_keys),
+        minimum_core_books=3,
+        allow_partial=True,
     )
 
 
@@ -436,13 +438,30 @@ if refresh_clicked:
                         previous_snapshot
                 }
 
-            st.session_state.live_lines = (
-                live_lines
+            # The API may omit a game entirely. Keep its saved quotes so the
+            # board can still show the projection, and disclose the fallback.
+            live_core_games = set(
+                live_lines.loc[
+                    live_lines["sportsbook"].isin(CORE_CONSENSUS_BOOKS),
+                    "game_key",
+                ].astype(str)
             )
+            fallback_games = set(active_game_keys) - live_core_games
+            fallback_lines = static_lines.loc[
+                static_lines["game_key"].astype(str).isin(fallback_games)
+            ].copy()
+            fresh_lines = live_lines.loc[
+                ~live_lines["game_key"].astype(str).isin(fallback_games)
+            ].copy()
+            combined_lines = pd.concat(
+                [fresh_lines, fallback_lines], ignore_index=True
+            )
+            # Validate the complete board before replacing the last good view.
+            rebuild_board(base_board, combined_lines)
 
-            st.session_state.live_metadata = (
-                metadata
-            )
+            metadata["saved_fallback_games"] = sorted(fallback_games)
+            st.session_state.live_lines = combined_lines
+            st.session_state.live_metadata = metadata
 
             st.session_state.refresh_error = None
 
@@ -475,6 +494,31 @@ except Exception as exc:
         f"a valid board: {type(exc).__name__}: {exc}"
     )
     st.stop()
+
+# Thin or saved markets remain visible for context, but their model gaps
+# require manual verification rather than a normal dashboard signal.
+if st.session_state.live_metadata:
+    thin_games = set(
+        st.session_state.live_metadata.get("market_unavailable_games", [])
+    )
+    fallback_games = set(
+        st.session_state.live_metadata.get("saved_fallback_games", [])
+    )
+    flagged = board["game_key"].astype(str).isin(thin_games | fallback_games)
+    if flagged.any():
+        board.loc[flagged, "dashboard_signal"] = "VERIFY QUOTE"
+        board.loc[flagged, "recommendation_eligibility"] = "VERIFY_QUOTE"
+        board.loc[flagged, "best_quote_status"] = "MANUAL_VERIFY_THIN_MARKET"
+        st.warning(
+            f"{int(flagged.sum())} game(s) have fewer than three live core "
+            "books. Their displayed lines are thin-market quotes or saved "
+            "fallbacks. Verify the line directly with a sportsbook before "
+            "using any model disagreement."
+        )
+        if fallback_games:
+            st.caption(
+                "Saved quotes used for: " + ", ".join(sorted(fallback_games))
+            )
 
 # A Streamlit process can briefly retain the prior spread-only helper module while
 # loading a newly deployed app. Rebuild totals here when that mixed-version state
