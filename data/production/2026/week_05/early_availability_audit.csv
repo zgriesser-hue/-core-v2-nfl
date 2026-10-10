@@ -1,1 +1,2 @@
 season,week,team,player,position_group,assessment,source_url,source_published_at_utc,observed_at_utc,reviewed_by,reason,adjustment_points,out_adjustment_points
+2026,5,BAL,Lamar Jackson,QB,CONFIRMED_OUT,https://www.nfl.com/injuries/league/2026/reg5,2026-10-10T17:32:39Z,2026-10-10T17:32:39Z,model-research,NFL Week 5 report lists Jackson Out and Tyler Huntley starting; temporary 1.50-point QB fallback pending player-specific calibration,-1.5,-1.5
