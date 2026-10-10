@@ -2,7 +2,7 @@ team,report_available
 ARI,True
 ATL,True
 BAL,True
-BUF,False
+BUF,True
 CHI,True
 CIN,True
 CLE,True
@@ -13,7 +13,7 @@ GB,True
 HOU,True
 IND,True
 JAX,True
-LA,False
+LA,True
 LAC,True
 LV,True
 MIA,True
