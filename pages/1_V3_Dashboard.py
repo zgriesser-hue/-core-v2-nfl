@@ -420,6 +420,46 @@ board["fair_display"] = -board["fair_home_spread_v3"]
 
 board["market_display"] = board["market_home_spread"].where(
     board["_market_rebuilt"], -board["market_home_spread"])
+
+# Retain the last captured market for display after the four-hour
+# freshness window. A stale line never produces a current betting edge.
+board["market_display_status"] = "CURRENT"
+if not archived_board:
+    unpriced = ~board["_market_rebuilt"].fillna(False)
+    board.loc[unpriced, ["edge_points", "model_side"]] = [float("nan"), pd.NA]
+    board.loc[unpriced, "market_display_status"] = "NO RECENT CONSENSUS"
+
+    # The repo's book snapshot is independent of the V3 publication and
+    # can contain a later line than the one embedded in week_v3_board.csv.
+    if not static_lines.empty and {"sportsbook", "away_team", "home_team", "home_spread"}.issubset(static_lines):
+        saved_core = static_lines.loc[
+            static_lines["sportsbook"].isin(CORE_CONSENSUS_BOOKS)
+        ].copy()
+        if "book_feed_status" in saved_core:
+            saved_core = saved_core.loc[saved_core["book_feed_status"].eq("ACTIVE")]
+        saved_core["home_spread"] = pd.to_numeric(saved_core["home_spread"], errors="coerce")
+        saved_core = saved_core.dropna(subset=["home_spread"])
+        latest = (
+            saved_core.groupby(["away_team", "home_team"], as_index=False)
+            .agg(last_home_spread=("home_spread", "median"),
+                 last_core_books=("sportsbook", "nunique"))
+        )
+        latest = latest.loc[latest["last_core_books"] >= 2]
+        saved_values = board[["away_team", "home_team"]].merge(
+            latest, on=["away_team", "home_team"], how="left", sort=False
+        )["last_home_spread"].set_axis(board.index)
+        saved_match = unpriced & saved_values.notna()
+        board.loc[saved_match, "market_display"] = saved_values.loc[saved_match]
+        board.loc[saved_match, "market_display_status"] = "LAST CAPTURED — STALE"
+
+    # Fall back to the published V3 snapshot if no saved two-book line
+    # exists. V3's stored market uses margin convention, hence the flip.
+    published = raw_board.set_index("game_key")["market_home_spread"]
+    published_values = board["game_key"].map(published)
+    published_match = unpriced & board["market_display"].isna() & published_values.notna()
+    board.loc[published_match, "market_display"] = -published_values.loc[published_match]
+    board.loc[published_match, "market_display_status"] = "PUBLISHED SNAPSHOT — STALE"
+
 if "unpriced_injury_notes" in board:
     pending_injury = board.unpriced_injury_notes.fillna("").ne("")
     board.loc[pending_injury, "edge_points"] = float("nan")
@@ -473,6 +513,7 @@ with tab1:
             "Market": filtered.apply(
                 lambda row: display_home_line(row["away_team"], row["home_team"], row["market_display"]), axis=1
             ),
+            "Market status": filtered["market_display_status"],
             "Lean": filtered["model_side"],
             "Edge (pts)": filtered["edge_points"].round(2),
             "QB availability": filtered["qb_availability_notes"].fillna("") if "qb_availability_notes" in filtered else "",
@@ -485,7 +526,8 @@ with tab1:
     st.caption(
         "Edge measures disagreement with the market lines shown above "
         "(live if refreshed this session, otherwise the repository "
-        "snapshot) - not an expected-value estimate."
+        "snapshot). Stale last-captured lines remain visible for context; "
+        "their edges are withheld. This is not an expected-value estimate."
     )
 
 with tab2:
@@ -500,6 +542,7 @@ with tab2:
     c1, c2, c3 = st.columns(3)
     c1.metric("V3 Fair Line", display_home_line(row["away_team"], row["home_team"], row["fair_display"]))
     c1.metric("Market", display_home_line(row["away_team"], row["home_team"], row["market_display"]))
+    c1.caption("Market status: " + str(row["market_display_status"]))
     c2.metric("Disagreement", f'{row["edge_points"]:.2f} pts' if pd.notna(row["edge_points"]) else "\u2014")
     c2.metric("Lean", row["model_side"] if pd.notna(row["model_side"]) else "\u2014")
     if "pred_v30" in row:
