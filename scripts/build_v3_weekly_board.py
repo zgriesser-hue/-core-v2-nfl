@@ -22,11 +22,14 @@ def defer_unmatched_limited(audit: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
     reviewed = audit.copy()
     if reviewed.empty:
         return reviewed, reviewed.iloc[0:0]
-    required = {"gsis_id", "status_weight", "game_status", "practice_status",
-                "match_method", "v2_shadow_eligible", "position_group",
-                "team", "player_name"}
+    required = {"gsis_id", "status_weight", "v2_shadow_eligible",
+                "position_group", "team", "player_name"}
     if not required.issubset(reviewed):
         raise ValueError(f"Missing defensive audit fields: {sorted(required - set(reviewed))}")
+    # Some historical fixture audits omit practice metadata. Without all
+    # three fields, no row qualifies for this narrow exception.
+    if not {"game_status", "practice_status", "match_method"}.issubset(reviewed):
+        return reviewed, reviewed.iloc[0:0][["team", "player_name"]]
     weight = pd.to_numeric(reviewed.status_weight, errors="coerce")
     limited = (
         reviewed.gsis_id.isna()
