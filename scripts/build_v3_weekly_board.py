@@ -13,11 +13,13 @@ from scripts.v3_injury_guard import unresolved_injuries
 from v3_model.epa_updater import update_split_state
 
 
-def defer_unmatched_limited(audit: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Defer low-weight, undesignated practice listings lacking a PVAR identity.
+def defer_unrated_defenders(
+    audit: pd.DataFrame, ratings: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Keep unresolved PVAR rows visible while withholding affected edges.
 
-    These players receive no invented PVAR. Their team's game is blocked from
-    betting edges until the identity or availability is reviewed.
+    No value is imputed for these defenders. The native builder still checks
+    report coverage, known player IDs, weights, and team consistency.
     """
     reviewed = audit.copy()
     if reviewed.empty:
@@ -26,25 +28,24 @@ def defer_unmatched_limited(audit: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
                 "position_group", "team", "player_name"}
     if not required.issubset(reviewed):
         raise ValueError(f"Missing defensive audit fields: {sorted(required - set(reviewed))}")
-    # Some historical fixture audits omit practice metadata. Without all
-    # three fields, no row qualifies for this narrow exception.
-    if not {"game_status", "practice_status", "match_method"}.issubset(reviewed):
-        return reviewed, reviewed.iloc[0:0][["team", "player_name"]]
-    weight = pd.to_numeric(reviewed.status_weight, errors="coerce")
-    limited = (
-        reviewed.gsis_id.isna()
-        & reviewed.game_status.isna()
-        & reviewed.practice_status.eq("Limited Participation in Practice")
-        & reviewed.match_method.eq("UNMATCHED")
-        & reviewed.position_group.isin({"EDGE", "IDL", "LB", "DB"})
+    if not {"gsis_id", "pvar_production"}.issubset(ratings):
+        raise ValueError("PVAR ratings require player ID and production value")
+    eligible = (
+        reviewed.position_group.isin({"EDGE", "IDL", "LB", "DB"})
         & reviewed.v2_shadow_eligible.astype(str).str.lower().eq("true")
-        & weight.ge(0)
-        & weight.le(0.05)
     )
-    deferred = reviewed.loc[limited, ["team", "player_name"]].copy()
-    reviewed.loc[limited, "v2_shadow_eligible"] = False
+    rated_ids = set(ratings.loc[
+        ratings.gsis_id.notna() & pd.to_numeric(
+            ratings.pvar_production, errors="coerce"
+        ).notna(), "gsis_id"
+    ].astype(str))
+    unrated = eligible & (
+        reviewed.gsis_id.isna()
+        | ~reviewed.gsis_id.astype(str).isin(rated_ids)
+    )
+    deferred = reviewed.loc[unrated, ["team", "player_name"]].copy()
+    reviewed.loc[unrated, "v2_shadow_eligible"] = False
     return reviewed, deferred
-
 
 def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFrame,
                coverage: pd.DataFrame, audit: pd.DataFrame, ratings: pd.DataFrame,
@@ -100,14 +101,14 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
     if full_coverage:
         if audit.empty:
             raise ValueError("Official reports covered all teams but player audit is empty")
-        audit_for_pvar, deferred = defer_unmatched_limited(audit)
+        audit_for_pvar, deferred = defer_unrated_defenders(audit, ratings)
         pvar = attach_defensive_pvar(board, audit_for_pvar, ratings, coverage)
         pvar["personnel_adjustment"] += pvar.qb_adjustment
         pvar["pred_v3_lite"] += pvar.qb_adjustment
         pvar["fair_home_spread_v3"] = pvar.pred_v3_lite
         board = pvar
         board["personnel_status"] = (
-            "native_v3_fixed_225_unmatched_limited_review"
+            "native_v3_fixed_225_unrated_defender_review"
             if not deferred.empty else "native_v3_fixed_225_plus_reviewed_qb"
         )
     else:
@@ -155,7 +156,7 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
                 )
             )
         board["personnel_status"] = (
-            "native_v3_fixed_225_unmatched_limited_review"
+            "native_v3_fixed_225_unrated_defender_review"
             if full_coverage and not deferred.empty
             else "native_v3_fixed_225_plus_reviewed_availability" if full_coverage
             else "EARLY_PROVISIONAL_KNOWN_DEF_PVAR_ONLY"
@@ -176,7 +177,7 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
             lambda current: f"{current}; {note}" if current else note)
     for row in deferred.itertuples(index=False):
         mask = board.home_team.eq(row.team) | board.away_team.eq(row.team)
-        note = f"{row.player}: unmatched limited-practice PVAR needs identity review"
+        note = f"{row.player}: unresolved defensive PVAR needs identity and availability review"
         board.loc[mask, "unpriced_injury_notes"] = board.loc[mask, "unpriced_injury_notes"].map(
             lambda current: f"{current}; {note}" if current else note)
     blocked = board.unpriced_injury_notes.ne("")
