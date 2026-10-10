@@ -177,7 +177,7 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
             lambda current: f"{current}; {note}" if current else note)
     for row in deferred.itertuples(index=False):
         mask = board.home_team.eq(row.team) | board.away_team.eq(row.team)
-        note = f"{row.player}: unresolved defensive PVAR needs identity and availability review"
+        note = f"{row.player_name}: unresolved defensive PVAR needs identity and availability review"
         board.loc[mask, "unpriced_injury_notes"] = board.loc[mask, "unpriced_injury_notes"].map(
             lambda current: f"{current}; {note}" if current else note)
     blocked = board.unpriced_injury_notes.ne("")
