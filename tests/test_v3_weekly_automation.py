@@ -91,3 +91,51 @@ def test_reviewed_defensive_out_is_priced_before_report_and_not_double_counted()
                             ratings, availability, 2026, 4)
     assert partial.iloc[0].home_def_loss_pvar == pytest.approx(.8)
     assert partial.iloc[0].fair_home_spread_v3 == pytest.approx(-1.8)
+
+
+def test_unrated_defender_blocks_only_affected_matchup_edge():
+    priors = pd.DataFrame([
+        dict(team="JAX", offense_strength=0., defense_strength=0.),
+        dict(team="PHI", offense_strength=0., defense_strength=0.),
+    ])
+    schedule = pd.DataFrame([dict(
+        season=2026, week=5, game_id="2026_05_PHI_JAX",
+        away_team="PHI", home_team="JAX", location="Home",
+        spread_line=0., game_type="REG",
+    )])
+    coverage = pd.DataFrame([
+        dict(team="JAX", report_available=True),
+        dict(team="PHI", report_available=True),
+    ])
+    audit = pd.DataFrame([
+        dict(team="JAX", player_name="Jaylon Jones", gsis_id=None,
+             source_season=2026, source_week=5, position_group="DB",
+             v2_shadow_eligible=True, status_weight=0.05),
+        dict(team="PHI", player_name="Known defender", gsis_id="D1",
+             source_season=2026, source_week=5, position_group="DB",
+             v2_shadow_eligible=True, status_weight=1.0),
+    ])
+    ratings = pd.DataFrame([
+        dict(gsis_id="D1", team="PHI", pvar_production=0.5,
+             pvar_source="REBASED"),
+    ])
+    history = pd.DataFrame(columns=[
+        "season", "week", "game_id", "team", "plays", "epa_per_play",
+        "def_epa_per_play",
+    ])
+    availability = pd.DataFrame([
+        dict(team="JAX", position_group="QB", assessment="AVAILABLE",
+             adjustment_points=0.0),
+    ])
+    board, _ = build_week(
+        history, priors, schedule, coverage, audit, ratings,
+        availability, 2026, 5,
+    )
+    row = board.iloc[0]
+    assert row.away_def_loss_pvar == pytest.approx(0.5)
+    assert row.home_def_loss_pvar == pytest.approx(0.0)
+    assert "Jaylon Jones" in row.unpriced_injury_notes
+    assert row.edge_status == "INJURY_REVIEW_REQUIRED"
+    assert pd.isna(row.edge_points)
+    assert pd.isna(row.model_side)
+    assert audit.v2_shadow_eligible.all()
