@@ -117,13 +117,13 @@ jobs:
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
-          if [ -z "$(git status --porcelain -- data/research/v3 data/production week_v3_board.csv data/tracking/v3_projection_releases.csv)" ]; then
+          if [ -z "$(git status --porcelain -- data/research/v3 week_v3_board.csv data/tracking/v3_projection_releases.csv)" ]; then
             echo "V3 snapshot unchanged"
             exit 0
           fi
           git config user.name "core-v2-automation"
           git config user.email "core-v2-automation@users.noreply.github.com"
-          git add data/research/v3 data/production week_v3_board.csv data/tracking/v3_projection_releases.csv
+          git add data/research/v3 week_v3_board.csv data/tracking/v3_projection_releases.csv
           git commit -m "data: refresh provisional V3 weekly board"
           for attempt in 1 2 3; do
             if git push; then
