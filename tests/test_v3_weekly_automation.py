@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from scripts.build_v3_team_game_history import assemble_history
-from scripts.build_v3_weekly_board import build_week
+from scripts.build_v3_weekly_board import build_week, unreviewed_official_qbs
 
 
 def test_history_uses_only_final_graded_games():
@@ -139,3 +139,29 @@ def test_unrated_defender_blocks_only_affected_matchup_edge():
     assert pd.isna(row.edge_points)
     assert pd.isna(row.model_side)
     assert audit.v2_shadow_eligible.all()
+
+
+def test_official_starter_qb_designations_require_current_week_review():
+    audit = pd.DataFrame([
+        dict(team="BAL", player_name="Lamar Jackson", position_group="QB",
+             game_status="Out", expected_role_v2=.73),
+        dict(team="TB", player_name="Baker Mayfield", position_group="QB",
+             game_status="Out", expected_role_v2=.99),
+        dict(team="CHI", player_name="Caleb Williams", position_group="QB",
+             game_status="Questionable", expected_role_v2=1.0),
+        dict(team="CLE", player_name="Dillon Gabriel", position_group="QB",
+             game_status="Out", expected_role_v2=.08),
+    ])
+    reviewed = pd.DataFrame([
+        dict(team="BAL", player="Lamar Jackson", assessment="CONFIRMED_OUT"),
+    ])
+    pending = unreviewed_official_qbs(audit, reviewed)
+    assert set(pending.player) == {"Baker Mayfield", "Caleb Williams"}
+    assert pending.loc[pending.player.eq("Baker Mayfield"), "reason"].iloc[0] == (
+        "official QB Out requires current-week review"
+    )
+
+    conflict = reviewed.copy()
+    conflict["assessment"] = "AVAILABLE"
+    with pytest.raises(ValueError, match="conflicts"):
+        unreviewed_official_qbs(audit, conflict)
