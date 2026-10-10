@@ -438,19 +438,31 @@ if not archived_board:
         if "book_feed_status" in saved_core:
             saved_core = saved_core.loc[saved_core["book_feed_status"].eq("ACTIVE")]
         saved_core["home_spread"] = pd.to_numeric(saved_core["home_spread"], errors="coerce")
+        observed_column = ("spread_observed_timestamp_et"
+                           if "spread_observed_timestamp_et" in saved_core
+                           else "market_snapshot_timestamp_et")
+        saved_core["last_seen"] = pd.to_datetime(
+            saved_core[observed_column], utc=True, errors="coerce", format="mixed"
+        )
         saved_core = saved_core.dropna(subset=["home_spread"])
         latest = (
             saved_core.groupby(["away_team", "home_team"], as_index=False)
             .agg(last_home_spread=("home_spread", "median"),
-                 last_core_books=("sportsbook", "nunique"))
+                 last_core_books=("sportsbook", "nunique"),
+                 last_seen=("last_seen", "max"))
         )
         latest = latest.loc[latest["last_core_books"] >= 2]
-        saved_values = board[["away_team", "home_team"]].merge(
+        saved_lookup = board[["away_team", "home_team"]].merge(
             latest, on=["away_team", "home_team"], how="left", sort=False
-        )["last_home_spread"].set_axis(board.index)
+        ).set_axis(board.index)
+        saved_values = saved_lookup["last_home_spread"]
         saved_match = unpriced & saved_values.notna()
         board.loc[saved_match, "market_display"] = saved_values.loc[saved_match]
-        board.loc[saved_match, "market_display_status"] = "LAST CAPTURED — STALE"
+        saved_times = saved_lookup["last_seen"].dt.tz_convert("America/New_York")
+        saved_labels = saved_times.dt.strftime("%b %-d %-I:%M %p ET").fillna("time unknown")
+        board.loc[saved_match, "market_display_status"] = (
+            "LAST CAPTURED — " + saved_labels.loc[saved_match]
+        )
 
     # Fall back to the published V3 snapshot if no saved two-book line
     # exists. V3's stored market uses margin convention, hence the flip.
@@ -458,7 +470,17 @@ if not archived_board:
     published_values = board["game_key"].map(published)
     published_match = unpriced & board["market_display"].isna() & published_values.notna()
     board.loc[published_match, "market_display"] = -published_values.loc[published_match]
-    board.loc[published_match, "market_display_status"] = "PUBLISHED SNAPSHOT — STALE"
+    published_times = raw_board.set_index("game_key").get("market_snapshot_timestamp_utc")
+    if published_times is not None:
+        published_times = pd.to_datetime(
+            board["game_key"].map(published_times), utc=True, errors="coerce", format="mixed"
+        ).dt.tz_convert("America/New_York")
+        published_labels = published_times.dt.strftime("%b %-d %-I:%M %p ET").fillna("time unknown")
+        board.loc[published_match, "market_display_status"] = (
+            "PUBLISHED SNAPSHOT — " + published_labels.loc[published_match]
+        )
+    else:
+        board.loc[published_match, "market_display_status"] = "PUBLISHED SNAPSHOT — time unknown"
 
 if "unpriced_injury_notes" in board:
     pending_injury = board.unpriced_injury_notes.fillna("").ne("")
