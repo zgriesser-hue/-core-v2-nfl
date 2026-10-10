@@ -47,6 +47,42 @@ def defer_unrated_defenders(
     reviewed.loc[unrated, "v2_shadow_eligible"] = False
     return reviewed, deferred
 
+def unreviewed_official_qbs(audit: pd.DataFrame, availability: pd.DataFrame) -> pd.DataFrame:
+    """Flag likely starting QBs with a game designation and no reviewed scenario."""
+    columns = ["team", "player", "reason"]
+    required = {"team", "player_name", "position_group", "game_status", "expected_role_v2"}
+    if audit.empty or not required.issubset(audit):
+        return pd.DataFrame(columns=columns)
+    roles = pd.to_numeric(audit.expected_role_v2, errors="coerce")
+    flagged = audit.loc[
+        audit.position_group.eq("QB")
+        & audit.game_status.astype(str).str.lower().isin({"out", "doubtful", "questionable"})
+        & roles.ge(0.70)
+    ].copy()
+    reviewed = (
+        set(zip(availability.team.astype(str), availability.player.astype(str)))
+        if not availability.empty and {"team", "player"}.issubset(availability) else set()
+    )
+    if not availability.empty:
+        available = set(zip(
+            availability.loc[availability.assessment.eq("AVAILABLE"), "team"].astype(str),
+            availability.loc[availability.assessment.eq("AVAILABLE"), "player"].astype(str),
+        ))
+        conflicts = flagged.loc[
+            flagged.apply(lambda row: (str(row.team), str(row.player_name)) in available, axis=1)
+        ]
+        if not conflicts.empty:
+            raise ValueError("Official QB designation conflicts with AVAILABLE review: "
+                             + ", ".join(conflicts.player_name))
+    rows = [
+        dict(team=row.team, player=row.player_name,
+             reason=f"official QB {row.game_status} requires current-week review")
+        for row in flagged.itertuples(index=False)
+        if (str(row.team), str(row.player_name)) not in reviewed
+    ]
+    return pd.DataFrame(rows, columns=columns)
+
+
 def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFrame,
                coverage: pd.DataFrame, audit: pd.DataFrame, ratings: pd.DataFrame,
                availability: pd.DataFrame, season: int, week: int,
@@ -170,6 +206,10 @@ def build_week(history: pd.DataFrame, priors: pd.DataFrame, schedule: pd.DataFra
         continuing_absences if continuing_absences is not None else pd.DataFrame(),
         availability, season, week)
     board["unpriced_injury_notes"] = ""
+    official_qb_review = unreviewed_official_qbs(audit, availability)
+    unresolved = pd.concat([unresolved, official_qb_review], ignore_index=True)
+    if not unresolved.empty:
+        unresolved = unresolved.drop_duplicates(["team", "player"], keep="last")
     for row in unresolved.itertuples(index=False):
         mask = board.home_team.eq(row.team) | board.away_team.eq(row.team)
         note = f"{row.player}: {row.reason}"
