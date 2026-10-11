@@ -1,6 +1,6 @@
 import pandas as pd
 
-from qb_research import build_qb_games, pregame_switch_signals, evaluate_loso
+from scripts.qb_replacement_research import build_qb_games, pregame_switch_signals, evaluate_loso
 
 
 def test_scramble_and_pass_are_attributed_to_same_qb():
