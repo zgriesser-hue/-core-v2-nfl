@@ -1,0 +1,30 @@
+name: QB replacement research
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/qb_replacement_research.py'
+      - 'tests/test_qb_replacement_research.py'
+      - '.github/workflows/qb_replacement_research.yml'
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas numpy pytest
+      - run: python -m pytest -q tests/test_qb_replacement_research.py
+      - run: |
+          python scripts/qb_replacement_research.py \
+            --control data/research/v3/v30_authoritative_control_1584.csv \
+            --out-dir qb_replacement_results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qb-replacement-results
+          path: qb_replacement_results/*.csv
