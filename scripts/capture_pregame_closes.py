@@ -36,6 +36,28 @@ def target_games(games: pd.DataFrame, now: datetime, deadline: datetime,
     return candidates.loc[candidates.kickoff_utc.eq(candidates.kickoff_utc.iloc[0])]
 
 
+def capture_due_games(due: pd.DataFrame, runner=subprocess.run) -> set[str]:
+    """Attempt each due kickoff and report failures without discarding earlier captures."""
+    failed: set[str] = set()
+    for week, group in due.groupby("week"):
+        week = int(week)
+        keys = group.game_key.astype(str).tolist()
+        print(f"Capturing Week {week}: {', '.join(keys)}", flush=True)
+        try:
+            runner([
+                sys.executable, "-m", "scripts.capture_closings",
+                "--season", "2026", "--week", str(week),
+                "--schedule", str(SCHEDULE),
+                "--output-dir", str(MARKET_ROOT / f"week_{week:02d}"),
+                "--tracking-consensus", str(TRACKING),
+                "--minimum-lead", "0", "--maximum-lead", "20",
+            ], check=True)
+        except subprocess.CalledProcessError:
+            failed.update(keys)
+            print(f"Closing capture failed for {', '.join(keys)}", flush=True)
+    return failed
+
+
 def main() -> None:
     started = datetime.now(timezone.utc)
     deadline = started + MAX_WORKER_SPAN
@@ -50,28 +72,21 @@ def main() -> None:
         print("No upcoming scheduled games")
         return
     attempted: set[str] = set()
+    failed: set[str] = set()
     while True:
         now = datetime.now(timezone.utc)
         due = target_games(games, now, deadline, attempted)
         if due.empty:
             print("No more reachable kickoffs; backup capture complete")
+            if failed:
+                raise RuntimeError(f"Closing capture failed for: {', '.join(sorted(failed))}")
             return
         target = due.kickoff_utc.iloc[0].to_pydatetime() - TARGET_BEFORE_KICKOFF
         wait = max(0, (target - now).total_seconds())
         if wait:
             print(f"Waiting {wait:.0f}s until the next pre-kickoff capture", flush=True)
             time.sleep(wait)
-        for week, group in due.groupby("week"):
-            week = int(week)
-            print(f"Capturing Week {week}: {', '.join(group.game_key)}", flush=True)
-            subprocess.run([
-                sys.executable, "-m", "scripts.capture_closings",
-                "--season", "2026", "--week", str(week),
-                "--schedule", str(SCHEDULE),
-                "--output-dir", str(MARKET_ROOT / f"week_{week:02d}"),
-                "--tracking-consensus", str(TRACKING),
-                "--minimum-lead", "0", "--maximum-lead", "20",
-            ], check=True)
+        failed.update(capture_due_games(due))
         attempted.update(due.game_key.astype(str))
 
 
