@@ -66,7 +66,7 @@ def due_closing_games(
 
 
 def consensus_from_quotes(quotes: pd.DataFrame) -> pd.DataFrame:
-    core = quotes.loc[quotes["sportsbook"].isin(CORE_CONSENSUS_BOOKS)].copy()
+    core = quotes.loc[quotes["sportsbook"].isin(CORE_CONSENSUS_BOOKS) & pd.to_numeric(quotes["home_spread"], errors="coerce").notna()].copy()
     for column in ["total_points", "away_moneyline_american", "home_moneyline_american"]:
         if column not in core.columns:
             core[column] = np.nan
