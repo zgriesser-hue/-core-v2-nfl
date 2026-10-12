@@ -1,0 +1,15 @@
+season,week,game_id,away_team,home_team,personnel_correction_current_clean,personnel_correction_min_clean,personnel_correction_max_clean,report_coverage_complete_clean,personnel_info_complete,week1_personnel_status_clean,away_report_available,home_report_available,away_known_exposure,home_known_exposure,away_unresolved_exposure_max,home_unresolved_exposure_max,manual_adjustment_home,qb_availability_provisional
+2026,6,2026_06_SEA_DEN,SEA,DEN,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_HOU_JAX,HOU,JAX,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_CHI_ATL,CHI,ATL,-0.39,-0.39,-0.39,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,-0.39,False
+2026,6,2026_06_BAL_CLE,BAL,CLE,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_TEN_IND,TEN,IND,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_NYJ_NE,NYJ,NE,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_NO_NYG,NO,NYG,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_CAR_PHI,CAR,PHI,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_PIT_TB,PIT,TB,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_ARI_LA,ARI,LA,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_LAC_KC,LAC,KC,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_BUF_LV,BUF,LV,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_DAL_GB,DAL,GB,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
+2026,6,2026_06_WAS_SF,WAS,SF,0.0,0.0,0.0,False,False,EARLY_PROVISIONAL,False,False,0.0,0.0,0.0,0.0,0.0,False
