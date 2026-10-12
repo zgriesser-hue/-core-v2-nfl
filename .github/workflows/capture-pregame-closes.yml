@@ -37,7 +37,8 @@ jobs:
           PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
         run: python scripts/capture_pregame_closes.py
 
-      - name: Commit captured close
+      - name: Commit captured close even if a later kickoff failed
+        if: always()
         shell: bash
         run: |
           if [ -z "$(git status --porcelain -- data/market/ data/tracking/closing_consensus.csv)" ]; then
