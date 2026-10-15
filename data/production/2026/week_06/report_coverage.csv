@@ -13,9 +13,9 @@ HOU,True
 IND,True
 JAX,True
 KC,True
-LA,False
+LA,True
 LAC,True
-LV,False
+LV,True
 NE,True
 NO,True
 NYG,True
@@ -23,7 +23,7 @@ NYJ,True
 PHI,True
 PIT,True
 SEA,True
-SF,False
+SF,True
 TB,True
 TEN,True
-WAS,False
+WAS,True
