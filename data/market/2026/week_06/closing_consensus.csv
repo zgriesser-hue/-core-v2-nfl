@@ -1,0 +1,2 @@
+season,week,game_key,away_team,home_team,closing_home_spread,closing_total,closing_away_moneyline,closing_home_moneyline,consensus_books,total_consensus_books,moneyline_consensus_books,snapshot_timestamp_utc,kickoff_utc,closing_method
+2026,6,2026_W6_SEA_DEN,SEA,DEN,2.5,40.5,-148.0,125.0,4,4,4,2026-10-16T00:03:05+00:00,2026-10-16 00:15:00+00:00,MEDIAN_CORE_BOOKS_PREKICK
